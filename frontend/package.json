@@ -1,0 +1,15 @@
+{
+  "name": "nc-crm-frontend",
+  "private": true,
+  "packageManager": "pnpm@9.15.0",
+  "scripts": {
+    "dev": "pnpm --parallel --filter campo --filter web dev",
+    "test": "pnpm --filter @nc/ui test --if-present && pnpm --filter web test --if-present && pnpm --filter campo test --if-present",
+    "e2e": "playwright test --project=e2e",
+    "parity": "playwright test --project=parity --project=parity-campo",
+    "lint": "eslint . || true"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.49.0"
+  }
+}

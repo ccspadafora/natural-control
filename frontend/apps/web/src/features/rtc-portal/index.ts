@@ -1,0 +1,7 @@
+export { MisNumerosPage } from "./MisNumerosPage"
+export { AgendaPage } from "./AgendaPage"
+export { CarteraPage } from "./CarteraPage"
+export { ClientDetailPage } from "./ClientDetailPage"
+export { ForecastPage } from "./ForecastPage"
+export { ProgramacionPage, ProgramacionNuevaPage } from "./ProgramacionPage"
+export { MiCartaPage } from "./MiCartaPage"

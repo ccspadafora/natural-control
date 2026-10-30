@@ -1,0 +1,8 @@
+export { BacklogStubPage } from "./BacklogStubPage"
+export { EmbudoPage } from "./EmbudoPage"
+export { MensajesPage } from "./MensajesPage"
+export { AutomatizacionesPage } from "./AutomatizacionesPage"
+export { ErpPage } from "./ErpPage"
+export { InformesPage } from "./InformesPage"
+export { AuditoriaPage } from "./AuditoriaPage"
+export { CapacitacionPage } from "./CapacitacionPage"

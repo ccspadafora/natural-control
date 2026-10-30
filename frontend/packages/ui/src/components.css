@@ -1,0 +1,111 @@
+/* Natural Control · CRM de Campo — estilos de componentes (implementación de referencia). */
+body{margin:0;background:var(--canvas);color:var(--ink);font-family:var(--font-sans);-webkit-font-smoothing:antialiased}
+a{color:var(--primary)}a:hover{color:var(--primary-pressed)}
+.nc-row{display:flex;flex-wrap:wrap;gap:var(--space-3);align-items:center;padding:var(--space-4)}
+.nc-col{display:flex;flex-direction:column;gap:var(--space-3);padding:var(--space-4)}
+.nc-num{font-variant-numeric:tabular-nums}
+.nc-icon{width:18px;height:18px;flex:none}
+.nc-icon-sm{width:14px;height:14px;flex:none}
+/* Button */
+.nc-btn{display:inline-flex;align-items:center;justify-content:center;gap:var(--space-2);height:var(--control-md);padding:0 var(--space-5);border-radius:var(--radius-pill);border:1px solid transparent;font:700 14px/20px var(--font-sans);cursor:pointer;white-space:nowrap;transition:transform .08s ease,background-color .12s ease;box-sizing:border-box}
+.nc-btn:active{transform:scale(0.97)}
+.nc-btn:focus-visible{outline:2px solid var(--focus);outline-offset:2px}
+.nc-btn[disabled]{cursor:not-allowed;opacity:.45;transform:none}
+.nc-btn-lg{height:var(--control-lg);padding:0 var(--space-6);font-size:16px}
+.nc-btn-block{display:flex;width:100%}
+.nc-btn-primary{background:var(--primary);color:var(--on-primary)}
+.nc-btn-primary:active{background:var(--primary-pressed)}
+.nc-btn-secondary{background:var(--surface);color:var(--primary);border-color:var(--hairline)}
+.nc-btn-outline{background:var(--surface);color:var(--ink);border-color:var(--border-control)}
+.nc-btn-quiet{background:transparent;color:var(--primary);padding:0 var(--space-3)}
+.nc-btn-danger{background:var(--danger-solid);color:#ffffff}
+/* Badge */
+.nc-badge{display:inline-flex;align-items:center;gap:6px;height:24px;padding:0 var(--space-2);border-radius:var(--radius-sm);background:var(--surface-sunken);color:var(--ink-secondary);font:800 11px/14px var(--font-sans);letter-spacing:.06em;text-transform:uppercase;white-space:nowrap}
+.nc-badge-dot{width:8px;height:8px;border-radius:50%;flex:none;background:var(--border-control)}
+.nc-badge-primary .nc-badge-dot{background:var(--primary)}
+.nc-badge-success .nc-badge-dot{background:var(--success-solid)}
+.nc-badge-warning .nc-badge-dot{background:var(--warning-solid)}
+.nc-badge-danger .nc-badge-dot{background:var(--danger-solid)}
+.nc-badge-accent .nc-badge-dot{background:var(--accent)}
+.nc-badge-danger{color:var(--danger)}
+.nc-badge-success .nc-icon-sm{color:var(--success)}.nc-badge-warning .nc-icon-sm{color:var(--warning)}.nc-badge-primary .nc-icon-sm{color:var(--primary)}
+/* GpsCheck */
+.nc-gps{display:inline-flex;align-items:center;gap:var(--space-2);min-height:32px;box-sizing:border-box;padding:var(--space-1) var(--space-3) var(--space-1) var(--space-1);border-radius:var(--radius-pill);border:1px solid var(--hairline);background:var(--surface);color:var(--ink);font:700 14px/20px var(--font-sans);white-space:nowrap}
+.nc-gps-dot{display:inline-grid;place-items:center;width:24px;height:24px;border-radius:50%;flex:none}
+.nc-gps-dist{font-weight:400;color:var(--ink-secondary);font-variant-numeric:tabular-nums}
+.nc-gps-ok .nc-gps-dot{background:var(--success-solid);color:#172033}
+.nc-gps-bad{color:var(--danger);border-color:var(--danger)}
+.nc-gps-bad .nc-gps-dot{background:var(--danger-solid);color:#ffffff}
+.nc-gps-warn .nc-gps-dot{background:var(--warning-solid);color:#172033}
+.nc-gps-none{color:var(--ink-secondary)}
+.nc-gps-none .nc-gps-dot{background:var(--surface-sunken);color:var(--ink-secondary)}
+.nc-gps-pre{border-style:dashed;border-color:var(--border-control)}
+/* ComplianceMeter */
+.nc-meter{background:var(--surface);border:1px solid var(--hairline);border-radius:var(--radius-md);padding:var(--space-4);display:grid;gap:var(--space-2);min-width:260px;box-sizing:border-box}
+.nc-meter-head{display:flex;justify-content:space-between;align-items:baseline;gap:var(--space-3)}
+.nc-meter-label{font:800 11px/14px var(--font-sans);letter-spacing:.06em;text-transform:uppercase;color:var(--ink-secondary)}
+.nc-meter-pct{font:800 24px/28px var(--font-sans);font-variant-numeric:tabular-nums;display:inline-flex;align-items:center;gap:var(--space-1)}
+.nc-meter-state{font:700 13px/18px var(--font-sans);color:var(--ink-secondary)}
+.nc-meter-track{position:relative;height:10px;border-radius:var(--radius-pill);background:var(--surface-sunken);overflow:visible}
+.nc-meter-fill{position:absolute;left:0;top:0;bottom:0;border-radius:var(--radius-pill)}
+.nc-meter-mark{position:absolute;top:-4px;bottom:-4px;width:2px;background:var(--ink);border-radius:1px}
+.nc-meter-foot{display:flex;justify-content:space-between;gap:var(--space-3);font:400 13px/18px var(--font-sans);color:var(--ink-secondary);font-variant-numeric:tabular-nums}
+.nc-tone-green .nc-icon-sm{color:var(--success)}.nc-fill-green{background:var(--success-solid)}
+.nc-tone-yellow .nc-icon-sm{color:var(--warning)}.nc-fill-yellow{background:var(--warning-solid)}
+.nc-tone-red{color:var(--danger)}.nc-fill-red{background:var(--danger-solid)}
+/* VisitCard */
+.nc-visit{display:grid;grid-template-columns:56px 1fr;gap:var(--space-3);background:var(--surface);border:1px solid var(--hairline);border-radius:var(--radius-md);padding:var(--space-4);min-height:var(--tap-min);text-align:left;width:100%;box-sizing:border-box;cursor:pointer;font-family:var(--font-sans);color:var(--ink)}
+.nc-visit:focus-visible{outline:2px solid var(--focus);outline-offset:2px}
+.nc-visit-time{font:800 17px/22px var(--font-sans);font-variant-numeric:tabular-nums;color:var(--ink)}
+.nc-visit-time small{display:block;font:400 13px/18px var(--font-sans);color:var(--ink-tertiary)}
+.nc-visit-body{display:grid;gap:var(--space-1);min-width:0}
+.nc-visit-title{font:700 17px/24px var(--font-sans);margin:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.nc-visit-meta{font:400 13px/18px var(--font-sans);color:var(--ink-secondary);display:flex;align-items:center;gap:var(--space-1)}
+.nc-visit-foot{display:flex;flex-wrap:wrap;gap:var(--space-2);margin-top:var(--space-1);align-items:center}
+.nc-visit-pending{color:var(--ink-secondary);font:700 13px/18px var(--font-sans);display:inline-flex;align-items:center;gap:var(--space-1)}
+.nc-visit-pending .nc-icon-sm{color:var(--warning)}
+/* TextField */
+.nc-field{display:grid;gap:6px;font-family:var(--font-sans);min-width:240px}
+.nc-field-label{font:700 14px/20px var(--font-sans);color:var(--ink)}
+.nc-field-label .nc-req{color:var(--danger);margin-left:2px}
+.nc-input{height:var(--tap-min);box-sizing:border-box;border:1px solid var(--border-control);border-radius:var(--radius-md);background:var(--surface);color:var(--ink);padding:0 var(--space-4);font:400 17px/24px var(--font-sans);width:100%}
+.nc-input::placeholder{color:var(--ink-tertiary)}
+.nc-input:focus{outline:2px solid var(--focus);outline-offset:0;border-color:var(--focus)}
+.nc-field-error .nc-input{border-color:var(--danger);border-width:2px}
+.nc-field-help{font:400 13px/18px var(--font-sans);color:var(--ink-secondary);display:flex;gap:var(--space-1);align-items:center}
+.nc-field-error .nc-field-help{color:var(--danger)}
+/* Tabs */
+.nc-tabs{display:inline-flex;gap:2px;padding:4px;background:var(--surface-sunken);border-radius:var(--radius-pill);box-sizing:border-box}
+.nc-tabs-block{display:flex;width:100%}.nc-tabs-block .nc-tab{flex:1;justify-content:center}
+.nc-tab{display:inline-flex;align-items:center;gap:var(--space-2);min-height:40px;padding:0 var(--space-4);border:0;border-radius:var(--radius-pill);background:transparent;color:var(--ink-secondary);font:700 14px/20px var(--font-sans);cursor:pointer}
+.nc-tab:focus-visible{outline:2px solid var(--focus);outline-offset:1px}
+.nc-tab[aria-selected="true"]{background:var(--surface);color:var(--ink);box-shadow:0 0 0 1px var(--hairline)}
+.nc-tab[aria-selected="true"] .nc-tab-count{color:var(--primary)}
+.nc-tab-count{min-width:20px;height:20px;padding:0 6px;box-sizing:border-box;border-radius:var(--radius-pill);background:transparent;color:var(--ink-tertiary);font:800 12px/20px var(--font-sans);text-align:center;font-variant-numeric:tabular-nums}
+/* SyncBanner */
+.nc-sync{display:flex;align-items:center;gap:var(--space-3);padding:var(--space-3) var(--space-4);font:700 14px/20px var(--font-sans);border-bottom:1px solid var(--hairline)}
+.nc-sync .nc-sync-text{flex:1}
+.nc-sync-offline{background:var(--surface);color:var(--ink)}
+.nc-sync-offline .nc-icon{color:var(--warning)}
+.nc-sync-syncing{background:var(--surface);color:var(--ink-secondary)}
+.nc-sync-syncing .nc-icon{color:var(--primary)}
+.nc-sync-error{background:var(--danger-tint);color:var(--danger)}
+.nc-sync-error .nc-icon{color:var(--danger)}
+.nc-sync .nc-btn{height:36px}
+@keyframes nc-spin{to{transform:rotate(360deg)}}
+.nc-spin{animation:nc-spin 1s linear infinite}
+@media (prefers-reduced-motion:reduce){.nc-spin{animation:none}.nc-btn{transition:none}}
+/* StatTile */
+.nc-stat{background:var(--surface);border:1px solid var(--hairline);border-radius:var(--radius-md);padding:var(--space-5) var(--space-6);display:grid;gap:var(--space-1);min-width:200px;box-sizing:border-box}
+.nc-stat-label{font:800 11px/14px var(--font-sans);letter-spacing:.06em;text-transform:uppercase;color:var(--ink-secondary)}
+.nc-stat-value{font:800 40px/44px var(--font-sans);letter-spacing:-0.02em;font-variant-numeric:tabular-nums;color:var(--ink)}
+.nc-stat-delta{font:700 13px/18px var(--font-sans);display:inline-flex;align-items:center;gap:var(--space-1)}
+.nc-stat-delta-up{color:var(--success)}.nc-stat-delta-down{color:var(--danger)}.nc-stat-delta-flat{color:var(--ink-secondary)}
+.nc-stat-caption{font:400 13px/18px var(--font-sans);color:var(--ink-tertiary)}
+/* Sol */
+[data-theme="sol"] .nc-visit,[data-theme="sol"] .nc-meter,[data-theme="sol"] .nc-stat{border-width:2px}
+[data-theme="sol"] .nc-input{border-width:2px}
+[data-theme="sol"] .nc-gps-ok .nc-gps-dot,[data-theme="sol"] .nc-gps-bad .nc-gps-dot{color:#ffffff}
+[data-theme="sol"] .nc-gps,[data-theme="sol"] .nc-badge{box-shadow:inset 0 0 0 1px var(--hairline)}
+[data-theme="sol"] .nc-meter-track{box-shadow:inset 0 0 0 1px var(--hairline)}
+[data-theme="sol"] .nc-gps-warn .nc-gps-dot{color:#000000}

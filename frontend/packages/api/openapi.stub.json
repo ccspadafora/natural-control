@@ -1,0 +1,32 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "Natural Control CRM API",
+    "version": "0.1.0",
+    "description": "Stub mínimo para generar el cliente cuando el backend no está disponible. Sustituir con ORVAL_SCHEMA=http://localhost:8000/api/schema/ cuando Docker esté arriba."
+  },
+  "paths": {
+    "/api/v1/auth/me": {
+      "get": {
+        "operationId": "authMe",
+        "tags": ["auth"],
+        "responses": {
+          "200": {
+            "description": "Sesión actual",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": { "type": "string" },
+                    "email": { "type": "string" }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

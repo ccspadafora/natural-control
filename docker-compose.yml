@@ -1,0 +1,104 @@
+services:
+  db:
+    image: postgis/postgis:16-3.4
+    environment:
+      POSTGRES_DB: nc
+      POSTGRES_USER: nc
+      POSTGRES_PASSWORD: nc
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./infra/docker/init-extensions.sql:/docker-entrypoint-initdb.d/10-extensions.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U nc -d nc"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  redis:
+    image: redis:7
+    command: ["redis-server", "--appendonly", "yes"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  mailpit:
+    image: axllent/mailpit:latest
+    ports:
+      - "8025:8025"
+
+  api:
+    build:
+      context: .
+      dockerfile: infra/docker/backend.Dockerfile
+      target: dev
+    env_file: .env
+    volumes:
+      - ./backend:/app
+      - venv:/app/.venv
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    command: ["uv", "run", "daphne", "-b", "0.0.0.0", "-p", "8000", "config.asgi:application"]
+
+  worker:
+    build:
+      context: .
+      dockerfile: infra/docker/backend.Dockerfile
+      target: dev
+    env_file: .env
+    volumes:
+      - ./backend:/app
+      - venv:/app/.venv
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    command: ["uv", "run", "celery", "-A", "config", "worker", "-Q", "default,sync,notify,whatsapp,erp,reports,maint", "-c", "2", "-l", "info"]
+
+  beat:
+    build:
+      context: .
+      dockerfile: infra/docker/backend.Dockerfile
+      target: dev
+    env_file: .env
+    volumes:
+      - ./backend:/app
+      - venv:/app/.venv
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    command: ["uv", "run", "celery", "-A", "config", "beat", "-l", "info", "--scheduler", "django_celery_beat.schedulers:DatabaseScheduler"]
+
+  frontend:
+    image: node:20-alpine
+    working_dir: /fe
+    volumes:
+      - ./frontend:/fe
+      - fe_modules:/fe/node_modules
+    command: >
+      sh -c "corepack enable && corepack prepare pnpm@9.15.0 --activate &&
+      pnpm install && pnpm dev"
+    depends_on:
+      - api
+
+  nginx:
+    image: nginx:1.27-alpine
+    volumes:
+      - ./infra/nginx/dev.conf:/etc/nginx/conf.d/default.conf:ro
+    ports:
+      - "8080:8080"
+    depends_on:
+      - api
+      - frontend
+
+volumes:
+  pgdata:
+  venv:
+  fe_modules:

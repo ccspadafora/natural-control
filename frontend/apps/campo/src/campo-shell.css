@@ -1,0 +1,58 @@
+.nc-campo {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  background: var(--canvas);
+  color: var(--ink);
+  font-family: var(--font-sans);
+}
+
+.nc-campo-body {
+  flex: 1;
+  padding: var(--space-4);
+  padding-bottom: calc(72px + var(--space-4));
+  box-sizing: border-box;
+}
+
+.nc-campo-tabs {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 64px;
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  background: var(--surface);
+  border-top: 1px solid var(--hairline);
+  z-index: 20;
+}
+
+.nc-campo-tab {
+  display: grid;
+  place-items: center;
+  gap: 2px;
+  text-decoration: none;
+  color: var(--ink-tertiary);
+  font: 700 11px/1.2 var(--font-sans);
+  padding: 8px 4px;
+}
+
+.nc-campo-tab.is-active {
+  color: var(--primary);
+}
+
+.nc-campo-tab-icon {
+  position: relative;
+  display: grid;
+  place-items: center;
+}
+
+.nc-campo-dot {
+  position: absolute;
+  top: -2px;
+  right: -4px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--danger-solid);
+}

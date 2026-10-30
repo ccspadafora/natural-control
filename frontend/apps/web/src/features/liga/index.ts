@@ -1,0 +1,1 @@
+export { LigaPage } from "./LigaPage"

@@ -1,0 +1,6 @@
+export { MgmtInicioPage } from "./InicioPage"
+export { VisitasEnVivoPage } from "./VisitasEnVivoPage"
+export { TablerosPage } from "./TablerosPage"
+export { ForecastPage } from "./ForecastPage"
+export { MapaZonasPage } from "./MapaZonasPage"
+export { isMgmtConsole, isGerencia } from "./shared/roles"

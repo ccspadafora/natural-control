@@ -1,0 +1,83 @@
+/* Shell + login alineados al prototipo Portal Natural Control */
+
+.nc-auth {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: var(--space-6);
+  box-sizing: border-box;
+  background: var(--canvas);
+  color: var(--ink);
+}
+
+.nc-auth-card {
+  width: 100%;
+  max-width: 440px;
+  background: var(--surface);
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-lg);
+  padding: var(--space-8);
+  display: grid;
+  gap: var(--space-6);
+}
+
+.nc-auth-brand {
+  display: grid;
+  gap: var(--space-4);
+}
+
+.nc-auth-title {
+  margin: 0;
+  font: var(--text-title-lg, 800 28px/1.2 var(--font-sans));
+  letter-spacing: -0.015em;
+}
+
+.nc-auth-lede {
+  margin: 4px 0 0;
+  font: var(--text-body, 400 15px/1.45 var(--font-sans));
+  color: var(--ink-secondary);
+}
+
+.nc-auth-form {
+  display: grid;
+  gap: var(--space-4);
+}
+
+.nc-auth-row-end {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.nc-auth-demo {
+  margin-top: var(--space-6);
+  display: grid;
+  gap: var(--space-2);
+  justify-items: center;
+  max-width: 440px;
+  width: 100%;
+}
+
+.nc-auth-demo-roles {
+  display: flex;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.nc-pill {
+  height: 36px;
+  padding: 0 14px;
+  border-radius: 999px;
+  border: 1px solid var(--border-control);
+  background: var(--surface);
+  color: var(--ink);
+  font: var(--text-label, 700 13px/1 var(--font-sans));
+  cursor: pointer;
+}
+
+.nc-eyebrow {
+  font: var(--text-eyebrow, 800 11px/1.2 var(--font-sans));
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ink-tertiary);
+}

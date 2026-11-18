@@ -1,44 +1,53 @@
 import { useMemo, useState } from "react"
 import type { SessionUser } from "@nc/domain"
-import { ComplianceMeter, GpsCheck, PageHead, StatTile, Tabs, type GpsStatus } from "@nc/ui"
+import { ComplianceMeter, Format, GpsCheck, PageHead, StatTile, Tabs } from "@nc/ui"
 import { LeaderPortalPage } from "../leader/LeaderPortalPage"
+import { gpsStatus } from "../leader/shared/geo"
 import { greeting, portalMonthEyebrow, visitClock } from "../rtc-portal/shared/format"
 import { AccumulatedSalesChart } from "./components/AccumulatedSalesChart"
 import { AttentionCardsToday, AttentionListCompact } from "./components/AttentionList"
 import { ZoneComplianceBars } from "./components/ZoneComplianceBars"
-import { placeholderAttention, placeholderRtcs, placeholderZones } from "./shared/placeholderData"
+import { attentionCases, moneyShort, pctLabel, zoneBarRows } from "./shared/metrics"
 import { mgmtScopeWord } from "./shared/scope"
-import { useMgmtVisits } from "./shared/visits"
+import { useLiveVisits, useTeamMetrics, useZoneMetrics } from "./shared/useMetrics"
 
 const HOME_TABS = [
   { id: "mes", label: "A · Mes" },
   { id: "dia", label: "B · Día" },
 ]
 
+const FEED_RANK: Record<string, number> = { EN_CURSO: 0, REALIZADA: 1, PROGRAMADA: 2 }
+
 export function MgmtInicioPage({ user, onLogout }: { user: SessionUser; onLogout: () => void }) {
   const [homeTab, setHomeTab] = useState("mes")
-  const attention = useMemo(() => placeholderAttention(), [])
-  const zones = useMemo(() => placeholderZones(), [])
-  const rtcs = useMemo(() => placeholderRtcs(), [])
-  const { rows: visits } = useMgmtVisits()
+  const { data: team, error } = useTeamMetrics("mes")
+  const { zones } = useZoneMetrics()
+  const { data: live } = useLiveVisits()
+
+  const attention = useMemo(() => attentionCases(team?.attention), [team])
+  const zoneRows = useMemo(() => zoneBarRows(zones), [zones])
+  const totals = team?.totals
 
   const liveFeed = useMemo(() => {
-    const open = visits.filter((v) => v.status === "EN_CURSO" || v.status === "PROGRAMADA").slice(0, 6)
-    return open.map((v, i) => ({
+    const open = (live?.results ?? [])
+      .filter((v) => v.status in FEED_RANK)
+      .sort((a, b) => FEED_RANK[a.status] - FEED_RANK[b.status] || (b.scheduled_start ?? "").localeCompare(a.scheduled_start ?? ""))
+      .slice(0, 6)
+    return open.map((v) => ({
       id: v.id,
       client: v.client_name,
       rtcName: v.rtc_name,
       mun: v.municipality,
       res: v.reason || "—",
       t: visitClock(v.scheduled_start),
-      gps: (i % 3 === 0 ? "VERIFICADA" : i % 3 === 1 ? "PRECISION_BAJA" : "FUERA_DE_RANGO") as GpsStatus,
-      dist: 12 + i * 7,
+      gps: v.gps ? gpsStatus(v.gps.status) : null,
+      dist: v.gps?.distance_m ?? undefined,
       rowBg: v.status === "EN_CURSO" ? "var(--primary-tint)" : "transparent",
     }))
-  }, [visits])
+  }, [live])
 
-  const visitCount = visits.length
-  const enCurso = visits.filter((v) => v.status === "EN_CURSO").length
+  const salesPace = totals && totals.expected > 0 ? totals.sales / totals.expected : null
+  const projection = totals && team && team.day > 0 ? totals.sales * (team.days_in_month / team.day) : null
 
   return (
     <LeaderPortalPage user={user} onLogout={onLogout}>
@@ -52,25 +61,39 @@ export function MgmtInicioPage({ user, onLogout }: { user: SessionUser; onLogout
         <Tabs items={HOME_TABS} value={homeTab} onChange={setHomeTab} label="Diseño del inicio" />
       </header>
 
+      {error ? <p className="nc-note">{error}</p> : null}
+
       <div className="nc-portal-metrics">
-        <StatTile label="Ventas del mes" value="—" delta="+4 pts vs. sep." deltaDirection="up" caption="Conecta ERP · próximo paso" />
-        <StatTile label="Forecast probable" value="—" delta="+9 % vs. sep." deltaDirection="up" caption="Noviembre a febrero" />
+        <StatTile
+          label="Ventas del mes"
+          value={totals ? Format.money(totals.sales) : "—"}
+          delta={salesPace != null ? `${Math.round(salesPace * 100)} % de lo esperado a la fecha` : undefined}
+          deltaDirection={salesPace == null ? "flat" : salesPace >= 1 ? "up" : "down"}
+          deltaGood={salesPace == null || salesPace >= 1}
+          caption={totals && totals.budget > 0 ? `Meta ${Format.money(totals.budget)}` : "Sin meta cargada"}
+        />
+        <StatTile label="Forecast probable" value={totals ? moneyShort(totals.forecast_probable) : "—"} caption="Potencial ponderado" />
         <StatTile
           label="Visitas realizadas"
-          value={visitCount > 0 ? String(visitCount) : "—"}
-          delta={visitCount > 0 ? undefined : undefined}
-          caption={visitCount > 0 ? `${enCurso} en curso ahora` : "Mes en curso · API visitas"}
+          value={totals ? Format.number(totals.visits_done) : "—"}
+          caption={totals && totals.visits_target > 0 ? `Meta del mes: ${Format.number(totals.visits_target)}` : "Mes en curso"}
         />
-        <StatTile label="Verificadas por GPS" value="—" delta="−1 pt vs. sep." deltaDirection="down" deltaGood={false} caption="Geolocalización" />
+        <StatTile label="Verificadas por GPS" value={pctLabel(totals?.gps_verified_pct)} caption="Geolocalización" />
       </div>
 
       {homeTab === "mes" ? (
         <>
           <div className="nc-portal-split">
-            <AccumulatedSalesChart />
+            <AccumulatedSalesChart
+              projection={projection}
+              sales={totals?.sales ?? 0}
+              budget={totals?.budget ?? 0}
+              day={team?.day ?? 1}
+              daysInMonth={team?.days_in_month ?? 30}
+            />
             <AttentionListCompact items={attention} />
           </div>
-          <ZoneComplianceBars zones={zones} />
+          <ZoneComplianceBars zones={zoneRows} />
         </>
       ) : null}
 
@@ -82,7 +105,7 @@ export function MgmtInicioPage({ user, onLogout }: { user: SessionUser; onLogout
           </section>
           <section className="nc-mgmt-day-col">
             <h2 className="nc-mgmt-section-title">Cumplimiento por RTC</h2>
-            {rtcs.map((r) => (
+            {(team?.rtcs ?? []).map((r) => (
               <ComplianceMeter key={r.id} label={r.name} value={r.sales} target={r.budget} expected={r.expected} />
             ))}
           </section>
@@ -101,7 +124,7 @@ export function MgmtInicioPage({ user, onLogout }: { user: SessionUser; onLogout
                     <span className="nc-portal-muted">
                       {v.rtcName} · {v.mun} · {v.res}
                     </span>
-                    <GpsCheck status={v.gps} distanceM={v.dist} />
+                    {v.gps ? <GpsCheck status={v.gps} distanceM={v.dist} /> : null}
                   </div>
                 ))
               )}
@@ -109,7 +132,6 @@ export function MgmtInicioPage({ user, onLogout }: { user: SessionUser; onLogout
           </section>
         </div>
       ) : null}
-
     </LeaderPortalPage>
   )
 }

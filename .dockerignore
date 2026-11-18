@@ -1,0 +1,17 @@
+.git
+**/__pycache__
+**/*.pyc
+**/.pytest_cache
+**/.mypy_cache
+**/.ruff_cache
+**/.venv
+**/node_modules
+# Keep apps/*/dist for nginx.prebuilt.Dockerfile (staging image).
+frontend/packages/*/dist
+*.pem
+.env
+.env.*
+!.env.example
+!.env.staging.example
+tmp
+.DS_Store

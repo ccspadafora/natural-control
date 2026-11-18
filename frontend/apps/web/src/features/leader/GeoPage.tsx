@@ -4,6 +4,7 @@ import { api, openStream } from "@nc/api"
 import type { SessionUser } from "@nc/domain"
 import { Badge, GpsCheck, PageHead } from "@nc/ui"
 import { LeaderPortalPage } from "./LeaderPortalPage"
+import { LocationChangesPanel } from "./LocationChangesPanel"
 import {
   GpsCheckRow,
   gpsStatus,
@@ -76,16 +77,7 @@ export function GeoPage({ user, onLogout }: { user: SessionUser; onLogout: () =>
           )}
         </div>
         <aside className="nc-geo-aside">
-          <div className="nc-portal-card nc-geo-loc-stub">
-            <h2 className="nc-portal-card-title">Cambios de ubicación por aprobar</h2>
-            <p className="nc-portal-muted">
-              Cuando exista la API de solicitudes de cambio de sede, las verás aquí para aprobar o rechazar.
-            </p>
-            <p className="nc-note">
-              {/* TODO: LocationChangeRequest — listar pendientes y acciones aprobar/rechazar (HU 2.5). */}
-              Backend pendiente: <code>LocationChangeRequest</code>.
-            </p>
-          </div>
+          <LocationChangesPanel />
           {rows[0] ? (
             <p className="nc-portal-muted">
               <Link to={`/consola/geo/${rows[0].id}`}>Abrir el primer caso</Link>

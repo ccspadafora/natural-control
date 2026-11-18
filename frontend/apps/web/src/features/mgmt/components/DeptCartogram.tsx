@@ -1,17 +1,17 @@
 import { DEPS, TILE_GAP, TILE_SIZE } from "../shared/departments"
-import { d1FromPct, d1ToneToBg, type MapZoneSummary } from "../shared/placeholderData"
+import { d1FromPct, d1ToneToBg, pctLabel, type ZoneMetric } from "../shared/metrics"
 
 type Props = {
-  zones: MapZoneSummary[]
+  zones: ZoneMetric[]
   selectedZoneId: string
   onSelectZone: (id: string) => void
   showVisitLayer: boolean
 }
 
-function depZoneMap(zones: MapZoneSummary[]) {
+function depZoneMap(zones: ZoneMetric[]) {
   const map: Record<string, string> = {}
   for (const z of zones) {
-    for (const code of z.deps) map[code] = z.id
+    for (const code of z.departments) map[code] = z.id
   }
   return map
 }
@@ -32,8 +32,7 @@ export function DeptCartogram({ zones, selectedZoneId, onSelectZone, showVisitLa
         {DEPS.map((dep) => {
           const zid = depZone[dep.code]
           const zone = zid ? byId[zid] : undefined
-          const pct = zone ? (zone.tone === "success" ? 92 : zone.tone === "warning" ? 78 : 68) : 0
-          const d1 = zone ? d1FromPct(pct) : null
+          const d1 = zone ? d1FromPct(zone.d1_pct) : null
           const active = zid === selectedZoneId
           return (
             <button
@@ -52,7 +51,7 @@ export function DeptCartogram({ zones, selectedZoneId, onSelectZone, showVisitLa
               <span className="nc-mgmt-dep-code">{dep.code}</span>
               <span className="nc-mgmt-dep-d1">{d1?.label ?? (zone ? "—" : "Sin zona")}</span>
               {showVisitLayer && zone ? (
-                <span className="nc-portal-muted nc-mgmt-dep-visits">{Math.round(18 / zone.deps.length)} visitas</span>
+                <span className="nc-portal-muted nc-mgmt-dep-visits">vis. {pctLabel(zone.visits_pct)}</span>
               ) : null}
             </button>
           )

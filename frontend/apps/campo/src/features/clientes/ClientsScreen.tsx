@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react"
 import { useNavigate } from "react-router-dom"
 import { api } from "@nc/api"
 import { Badge, Button, Icon } from "@nc/ui"
+import { isOfflineMode, listCachedClients } from "../../offline"
 import { daysSinceVisit, visitAgo } from "../shared/campo-format"
 
 type ClientRow = {
@@ -29,14 +30,44 @@ export function ClientsScreen() {
   const [error, setError] = useState("")
 
   useEffect(() => {
+    let alive = true
     const handle = setTimeout(() => {
       setLoaded(false)
-      api<{ results: ClientRow[] }>(`/api/v1/clients?q=${encodeURIComponent(query)}`)
-        .then((data) => setRows(data.results))
-        .catch((err) => setError(err instanceof Error ? err.message : "No se pudo cargar la cartera"))
-        .finally(() => setLoaded(true))
+
+      async function load() {
+        if (isOfflineMode()) {
+          const cached = (await listCachedClients(query)) as ClientRow[]
+          if (!alive) return
+          setRows(cached)
+          setError(cached.length ? "" : "Sin cartera local. Conéctate para sincronizar.")
+          setLoaded(true)
+          return
+        }
+        try {
+          const data = await api<{ results: ClientRow[] }>(`/api/v1/clients?q=${encodeURIComponent(query)}`)
+          if (!alive) return
+          setRows(data.results)
+          setError("")
+        } catch (err) {
+          const cached = (await listCachedClients(query)) as ClientRow[]
+          if (!alive) return
+          if (cached.length) {
+            setRows(cached)
+            setError("Mostrando cartera en caché.")
+          } else {
+            setError(err instanceof Error ? err.message : "No se pudo cargar la cartera")
+          }
+        } finally {
+          if (alive) setLoaded(true)
+        }
+      }
+
+      void load()
     }, 200)
-    return () => clearTimeout(handle)
+    return () => {
+      alive = false
+      clearTimeout(handle)
+    }
   }, [query])
 
   const clients = useMemo(() => {

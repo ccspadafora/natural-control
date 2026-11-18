@@ -26,8 +26,9 @@ CMD ["uv", "run", "python", "manage.py", "runserver", "0.0.0.0:8000"]
 
 FROM base AS prod
 RUN useradd -r -u 10001 -d /app app
-COPY --from=deps /app/.venv /app/.venv
 COPY backend/ .
+# Copiar el venv Linux DESPUÉS del código para que un .venv del host no lo pise.
+COPY --from=deps /app/.venv /app/.venv
 COPY infra/scripts/entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh \
  && mkdir -p /app/media /app/staticfiles \

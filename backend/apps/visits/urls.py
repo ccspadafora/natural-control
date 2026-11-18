@@ -7,10 +7,13 @@ from apps.visits.api import (
     VisitAssignView,
     VisitCloseView,
     VisitDetailView,
+    VisitLiveListView,
+    VisitLoadView,
     VisitNotDoneView,
     VisitNowView,
     VisitReassignView,
     VisitStartView,
+    VisitSuggestionsView,
 )
 from apps.visits.weekly_api import (
     WeeklyPlanApproveView,
@@ -33,6 +36,9 @@ urlpatterns = [
     path("weekly-plans/<uuid:plan_id>/return", WeeklyPlanReturnView.as_view()),
     path("weekly-plan-items/<uuid:item_id>", WeeklyPlanItemView.as_view()),
     path("visits/now", VisitNowView.as_view()),
+    path("visits/live", VisitLiveListView.as_view()),
+    path("visits/suggestions", VisitSuggestionsView.as_view()),
+    path("visits/load", VisitLoadView.as_view()),
     path("visits/assign", VisitAssignView.as_view()),
     path("visits/<uuid:visit_id>/reassign", VisitReassignView.as_view()),
     path("visits/<uuid:visit_id>", VisitDetailView.as_view()),

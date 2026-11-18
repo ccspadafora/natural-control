@@ -2,8 +2,30 @@ import { FormEvent, useEffect, useMemo, useState } from "react"
 import { Link, useLocation } from "react-router-dom"
 import { api } from "@nc/api"
 import type { SessionUser } from "@nc/domain"
-import { Badge, Button, PageHead, Tabs, type BadgeTone } from "@nc/ui"
+import { Badge, Button, Icon, PageHead, Tabs, type BadgeTone } from "@nc/ui"
 import { LeaderPortalPage } from "./LeaderPortalPage"
+import { useToast } from "../shared/useToast"
+
+type Suggestion = {
+  client_id: string
+  client_name: string
+  municipality: string
+  site_id?: string | null
+  reason: string
+  band: string
+  suggested_day: string
+  suggested_slot: string
+}
+
+type LoadRow = {
+  rtc_id: string
+  first_name: string
+  last_name: string
+  zone_name: string
+  visits_today: number
+  visits_week: number
+  week_target: number
+}
 
 type ComplianceRow = {
   rtc_id: string
@@ -44,12 +66,6 @@ const PLAN_STATUS: Record<string, { label: string; tone: BadgeTone }> = {
   APROBADA: { label: "Aprobada", tone: "success" },
   DEVUELTA: { label: "Devuelta", tone: "warning" },
 }
-
-const SUGGESTED_STUB = [
-  { id: "s1", name: "Agrícola San José", why: "Sin visita hace 45 días" },
-  { id: "s2", name: "Flores del Oriente", why: "Forecast probable alto" },
-  { id: "s3", name: "Cultivos El Retiro", why: "Programación devuelta la semana pasada" },
-]
 
 function day(iso: string) {
   return new Intl.DateTimeFormat("es-CO", { day: "numeric", month: "short", timeZone: "America/Bogota" }).format(
@@ -110,6 +126,8 @@ export function LeaderProgramacionPage({ user, onLogout }: { user: SessionUser; 
   const [busyId, setBusyId] = useState<string | null>(null)
 
   const [people, setPeople] = useState<Person[]>([])
+  const [loads, setLoads] = useState<Record<string, LoadRow>>({})
+  const [suggestions, setSuggestions] = useState<Suggestion[]>([])
   const [rtcId, setRtcId] = useState("")
   const [clients, setClients] = useState<ClientRow[]>([])
   const [clientId, setClientId] = useState("")
@@ -117,6 +135,10 @@ export function LeaderProgramacionPage({ user, onLogout }: { user: SessionUser; 
   const [time, setTime] = useState("09:00")
   const [assignError, setAssignError] = useState("")
   const [assignOk, setAssignOk] = useState("")
+  const [picked, setPicked] = useState<Record<string, boolean>>({})
+  const [bulkBusy, setBulkBusy] = useState(false)
+  const toast = useToast()
+  const pickedCount = suggestions.filter((x) => picked[x.client_id]).length
 
   const canRequire = user.permissions.includes("weekly_plan.require")
 
@@ -143,6 +165,13 @@ export function LeaderProgramacionPage({ user, onLogout }: { user: SessionUser; 
     api<{ results: Person[] }>("/api/v1/users?role=RTC&active=1")
       .then((data) => setPeople(data.results))
       .catch(() => setPeople([]))
+    api<{ results: LoadRow[] }>("/api/v1/visits/load")
+      .then((data) => {
+        const map: Record<string, LoadRow> = {}
+        for (const row of data.results) map[row.rtc_id] = row
+        setLoads(map)
+      })
+      .catch(() => setLoads({}))
     api<{ results: ClientRow[] }>("/api/v1/clients")
       .then((data) => {
         setClients(data.results)
@@ -155,7 +184,49 @@ export function LeaderProgramacionPage({ user, onLogout }: { user: SessionUser; 
     if (!rtcId && people[0]) setRtcId(people[0].id)
   }, [people, rtcId])
 
+  useEffect(() => {
+    if (!rtcId) return
+    setPicked({})
+    api<{ results: Suggestion[] }>(`/api/v1/visits/suggestions?rtc_id=${rtcId}`)
+      .then((data) => setSuggestions(data.results))
+      .catch(() => setSuggestions([]))
+  }, [rtcId])
+
   const selectedRtc = useMemo(() => people.find((p) => p.id === rtcId), [people, rtcId])
+  const selectedLoad = loads[rtcId]
+
+  async function assignPicked() {
+    if (!selectedRtc || pickedCount === 0) return
+    setBulkBusy(true)
+    setAssignError("")
+    try {
+      let ok = 0
+      for (const item of suggestions.filter((s) => picked[s.client_id])) {
+        const hour = item.suggested_slot === "TARDE" ? "15:00" : "09:00"
+        await api("/api/v1/visits/assign", {
+          method: "POST",
+          body: JSON.stringify({
+            client_id: item.client_id,
+            site_id: item.site_id,
+            rtc_id: rtcId,
+            scheduled_start: `${item.suggested_day}T${hour}:00-05:00`,
+            priority: item.band === "B1" ? "ALTA" : "MEDIA",
+          }),
+        })
+        ok += 1
+      }
+      toast.show(`${ok} ${ok === 1 ? "visita asignada" : "visitas asignadas"} a ${selectedRtc.first_name} ${selectedRtc.last_name}.`)
+      setPicked({})
+      const load = await api<{ results: LoadRow[] }>("/api/v1/visits/load")
+      const map: Record<string, LoadRow> = {}
+      for (const row of load.results) map[row.rtc_id] = row
+      setLoads(map)
+    } catch (err) {
+      setAssignError(err instanceof Error ? err.message : "No se pudo asignar")
+    } finally {
+      setBulkBusy(false)
+    }
+  }
 
   async function approve(planId: string) {
     setBusyId(planId)
@@ -321,6 +392,10 @@ export function LeaderProgramacionPage({ user, onLogout }: { user: SessionUser; 
             <span className="nc-portal-eyebrow">1 · Elige el comercial</span>
             {people.map((person) => {
               const active = person.id === rtcId
+              const load = loads[person.id]
+              const dayLoad = load?.visits_today ?? 0
+              const weekLoad = load?.visits_week ?? 0
+              const target = load?.week_target ?? 15
               return (
                 <button
                   key={person.id}
@@ -328,28 +403,60 @@ export function LeaderProgramacionPage({ user, onLogout }: { user: SessionUser; 
                   className={active ? "nc-plan-rtc is-active" : "nc-plan-rtc"}
                   onClick={() => setRtcId(person.id)}
                 >
-                  <span>{person.first_name} {person.last_name}</span>
-                  <span className="nc-portal-muted">{person.zone_name || "Sin zona"}</span>
+                  <span style={{ display: "flex", justifyContent: "space-between", gap: 8 }}>
+                    <span>{person.first_name} {person.last_name}</span>
+                    <span className="nc-portal-muted">{dayLoad} hoy</span>
+                  </span>
+                  <span className="nc-plan-load-track">
+                    <span className="nc-plan-load-fill" style={{ width: `${Math.min(100, (weekLoad / target) * 100)}%` }} />
+                  </span>
+                  <span className="nc-portal-muted">{weekLoad} de {target} esta semana · {person.zone_name || "Sin zona"}</span>
                 </button>
               )
             })}
           </div>
           <div className="nc-plan-assign-main">
-            <div className="nc-portal-card">
-              <h2 className="nc-portal-card-title">Clientes sugeridos</h2>
-              <p className="nc-portal-muted">Referencia del prototipo — próximo paso: motor de sugerencias.</p>
-              <ul className="nc-plan-suggest">
-                {SUGGESTED_STUB.map((item) => (
-                  <li key={item.id}>
-                    <strong>{item.name}</strong>
-                    <span className="nc-portal-muted">{item.why}</span>
-                  </li>
-                ))}
-              </ul>
+            <span className="nc-portal-eyebrow">
+              2 · Elige los clientes sugeridos{selectedRtc ? ` para ${selectedRtc.first_name} ${selectedRtc.last_name}` : ""}
+            </span>
+            {suggestions.length === 0 ? <p className="nc-portal-muted">No hay sugerencias para este comercial.</p> : null}
+            {suggestions.map((item) => {
+              const on = Boolean(picked[item.client_id])
+              return (
+                <button
+                  key={item.client_id}
+                  type="button"
+                  className={on ? "nc-plan-sugg is-on" : "nc-plan-sugg"}
+                  aria-pressed={on}
+                  onClick={() => setPicked((p) => ({ ...p, [item.client_id]: !p[item.client_id] }))}
+                >
+                  <span className="nc-plan-sugg-box">{on ? <Icon name="check" small /> : null}</span>
+                  <span className="nc-plan-sugg-body">
+                    <span className="nc-leader-link-title">
+                      {item.client_name} <span className="nc-portal-muted">· {item.municipality}</span>
+                    </span>
+                    <span className="nc-portal-muted">{item.reason}</span>
+                  </span>
+                </button>
+              )
+            })}
+            {(selectedLoad?.visits_today ?? 0) > 8 ? (
+              <Badge tone="warning" icon="alert">Ya tiene más de 8 visitas hoy · asígnalas para otro día</Badge>
+            ) : null}
+            <div className="nc-plan-sugg-foot">
+              <span className="nc-portal-muted">{pickedCount} seleccionadas</span>
+              <Button
+                type="button"
+                icon="check"
+                disabled={pickedCount === 0 || !selectedRtc || bulkBusy}
+                onClick={() => void assignPicked()}
+              >
+                {bulkBusy ? "Asignando…" : "Asignar visitas"}
+              </Button>
             </div>
             <form className="nc-portal-card nc-portal-form" onSubmit={assignVisit}>
               <h2 className="nc-portal-card-title">
-                Asignar visita{selectedRtc ? ` · ${selectedRtc.first_name} ${selectedRtc.last_name}` : ""}
+                Asignación manual{selectedRtc ? ` · ${selectedRtc.first_name} ${selectedRtc.last_name}` : ""}
               </h2>
               <label className="nc-field">
                 <span className="nc-field-label">Cliente</span>
@@ -376,6 +483,7 @@ export function LeaderProgramacionPage({ user, onLogout }: { user: SessionUser; 
           </div>
         </div>
       )}
+      {toast.node}
     </LeaderPortalPage>
   )
 }

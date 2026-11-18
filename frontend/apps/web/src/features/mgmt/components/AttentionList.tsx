@@ -1,6 +1,6 @@
 import { Link } from "react-router-dom"
 import { Icon } from "@nc/ui"
-import type { AttentionCase } from "../shared/placeholderData"
+import type { AttentionCase } from "../shared/metrics"
 
 export function AttentionListCompact({ items }: { items: AttentionCase[] }) {
   return (
@@ -10,6 +10,7 @@ export function AttentionListCompact({ items }: { items: AttentionCase[] }) {
         <span className="nc-portal-muted">{items.length} casos</span>
       </div>
       <div className="nc-mgmt-attention-list">
+        {items.length === 0 ? <p className="nc-portal-muted">Sin casos pendientes por ahora.</p> : null}
         {items.map((a) => (
           <Link key={a.id} className="nc-mgmt-attention-row" to={a.to}>
             <span className="nc-leader-link-icon">

@@ -6,7 +6,8 @@ import { defineConfig, devices } from "@playwright/test"
  */
 export default defineConfig({
   testDir: "./e2e",
-  fullyParallel: true,
+  fullyParallel: !process.env.PARITY_FULL,
+  workers: process.env.PARITY_FULL ? 1 : undefined,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 1 : 0,
   reporter: [["list"], ["html", { open: "never" }]],
@@ -23,6 +24,7 @@ export default defineConfig({
     {
       name: "parity",
       testMatch: /.*\.parity\.ts/,
+      testIgnore: /.*campo\.parity\.ts/,
       use: {
         ...devices["Desktop Chrome"],
         viewport: { width: 1440, height: 900 },
@@ -32,8 +34,10 @@ export default defineConfig({
       name: "parity-campo",
       testMatch: /.*campo\.parity\.ts/,
       use: {
-        ...devices["iPhone 12"],
+        ...devices["Desktop Chrome"],
         viewport: { width: 390, height: 844 },
+        isMobile: true,
+        hasTouch: true,
       },
     },
   ],

@@ -17,6 +17,8 @@ dist/
 .DS_Store
 media/
 staticfiles/
+backend/evidence/
+backend/exports/
 playwright-report/
 test-results/
 .pnpm-store/

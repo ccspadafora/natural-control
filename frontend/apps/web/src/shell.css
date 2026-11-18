@@ -739,6 +739,42 @@
   vertical-align: middle;
 }
 
+.nc-geo-loc-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: var(--space-4);
+}
+
+.nc-geo-loc-item {
+  display: grid;
+  gap: 8px;
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--hairline);
+}
+
+.nc-geo-loc-item:first-child {
+  border-top: 0;
+  padding-top: 0;
+}
+
+.nc-geo-loc-item-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: flex-start;
+}
+
+.nc-geo-loc-reason {
+  margin: 0;
+  font: var(--text-body);
+}
+
+.nc-geo-loc-coords {
+  font: var(--text-mono);
+}
+
 .nc-geo-just {
   display: grid;
   gap: 6px;
@@ -826,6 +862,86 @@
 .nc-plan-rtc.is-active {
   border-color: var(--primary);
   background: var(--primary-tint);
+}
+
+.nc-plan-load-track {
+  display: block;
+  height: 6px;
+  border-radius: 999px;
+  background: var(--surface-sunken);
+}
+
+.nc-plan-load-fill {
+  display: block;
+  height: 6px;
+  border-radius: 999px;
+  background: var(--chart-1);
+}
+
+.nc-plan-sugg {
+  display: flex;
+  gap: var(--space-3);
+  align-items: center;
+  padding: 14px 16px;
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  color: var(--ink);
+  text-align: left;
+  cursor: pointer;
+}
+
+.nc-plan-sugg.is-on {
+  border-color: var(--primary);
+  background: var(--primary-tint);
+}
+
+.nc-plan-sugg-box {
+  width: 22px;
+  height: 22px;
+  flex: none;
+  box-sizing: border-box;
+  border-radius: 6px;
+  border: 2px solid var(--hairline);
+  display: grid;
+  place-items: center;
+  color: var(--on-primary);
+}
+
+.nc-plan-sugg.is-on .nc-plan-sugg-box {
+  border-color: var(--primary);
+  background: var(--primary);
+}
+
+.nc-plan-sugg-body {
+  flex: 1;
+  display: grid;
+  gap: 2px;
+}
+
+.nc-plan-sugg-foot {
+  display: flex;
+  gap: var(--space-3);
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  border-top: 1px solid var(--hairline);
+  padding-top: var(--space-4);
+}
+
+.nc-plan-suggest-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 1fr));
+  gap: var(--space-3);
+}
+
+.nc-plan-suggest-card {
+  display: grid;
+  gap: 6px;
+  padding: var(--space-4);
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-md);
+  background: var(--surface);
 }
 
 .nc-plan-assign-main {
@@ -1537,5 +1653,420 @@
 @media (max-width: 720px) {
   .nc-admin-device-list li {
     grid-template-columns: 1fr;
+  }
+}
+
+/* Agenda calendario (Semana / Mes) */
+.nc-agenda-cal {
+  background: var(--surface);
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+}
+
+.nc-agenda-cal-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-4);
+  border-bottom: 1px solid var(--hairline);
+}
+
+.nc-agenda-cal-title {
+  margin: 0;
+  font: var(--text-title);
+}
+
+.nc-agenda-legend {
+  display: flex;
+  gap: var(--space-3);
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  font: var(--text-caption);
+  color: var(--ink-secondary);
+}
+
+.nc-agenda-legend i {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  margin-right: 6px;
+  vertical-align: middle;
+}
+
+.nc-agenda-week-scroll {
+  overflow-x: auto;
+}
+
+.nc-agenda-week-grid {
+  display: grid;
+  grid-template-columns: 72px repeat(6, minmax(0, 1fr));
+  min-width: 820px;
+}
+
+.nc-agenda-week-corner {
+  border-bottom: 1px solid var(--hairline);
+  background: var(--surface-sunken);
+}
+
+.nc-agenda-week-head {
+  display: grid;
+  gap: 4px;
+  justify-items: center;
+  padding: 10px 4px;
+  border-bottom: 1px solid var(--hairline);
+  border-left: 1px solid var(--hairline);
+  background: var(--surface-sunken);
+  font: var(--text-label);
+  color: var(--ink-secondary);
+}
+
+.nc-agenda-week-head.is-today {
+  background: var(--primary-tint);
+  color: var(--ink);
+}
+
+.nc-agenda-week-daynum {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 30px;
+  height: 30px;
+  border-radius: 999px;
+  font: 700 13px/1 var(--font-sans);
+}
+
+.nc-agenda-week-head.is-today .nc-agenda-week-daynum {
+  background: var(--primary);
+  color: var(--on-primary);
+}
+
+.nc-agenda-week-hours {
+  position: relative;
+  border-right: 1px solid var(--hairline);
+}
+
+.nc-agenda-week-hours span {
+  position: absolute;
+  left: 0;
+  right: 4px;
+  transform: translateY(-50%);
+  font: var(--text-caption);
+  color: var(--ink-tertiary);
+  text-align: right;
+}
+
+.nc-agenda-week-col {
+  position: relative;
+  border-left: 1px solid var(--hairline);
+}
+
+.nc-agenda-week-col.is-today {
+  background: var(--primary-tint);
+}
+
+.nc-agenda-week-line {
+  position: absolute;
+  left: 0;
+  right: 0;
+  border-top: 1px solid var(--hairline);
+}
+
+.nc-agenda-event {
+  position: absolute;
+  left: 4px;
+  right: 4px;
+  display: grid;
+  gap: 2px;
+  align-content: start;
+  padding: 6px 8px;
+  border-radius: 8px;
+  border: 1px solid var(--hairline);
+  text-align: left;
+  cursor: default;
+  overflow: hidden;
+}
+
+.nc-agenda-event-time {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font: 700 12px/14px var(--font-sans);
+  font-variant-numeric: tabular-nums;
+}
+
+.nc-agenda-event-time i {
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  flex-shrink: 0;
+}
+
+.nc-agenda-event-client {
+  font: 600 12px/14px var(--font-sans);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.nc-agenda-event-mun {
+  font: var(--text-caption);
+  color: var(--ink-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.nc-agenda-month-scroll {
+  overflow-x: auto;
+  padding: var(--space-4);
+}
+
+.nc-agenda-month-grid {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 6px;
+  min-width: 760px;
+}
+
+.nc-agenda-month-weekday {
+  font: var(--text-label);
+  color: var(--ink-secondary);
+  padding: 4px 6px;
+}
+
+.nc-agenda-month-cell {
+  display: grid;
+  gap: 6px;
+  align-content: start;
+  min-height: 92px;
+  padding: 8px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--hairline);
+  background: var(--surface);
+  text-align: left;
+  cursor: pointer;
+}
+
+.nc-agenda-month-cell.is-out {
+  background: var(--canvas);
+  color: var(--ink-tertiary);
+  cursor: default;
+}
+
+.nc-agenda-month-cell.is-today {
+  background: var(--primary-tint);
+  border-color: var(--primary);
+}
+
+.nc-agenda-month-num {
+  font: 700 14px/18px var(--font-sans);
+}
+
+.nc-agenda-month-meta {
+  display: grid;
+  gap: 2px;
+  font: var(--text-caption);
+  color: var(--ink-secondary);
+}
+
+.nc-agenda-month-late,
+.nc-agenda-month-prog {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.nc-agenda-month-late {
+  color: var(--danger);
+}
+
+.nc-agenda-month-late i,
+.nc-agenda-month-prog i {
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: var(--danger-solid);
+}
+
+.nc-agenda-month-prog i {
+  background: var(--primary);
+}
+
+/* Admin zonas cards + ranking mapa */
+.nc-admin-zone-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr));
+  gap: var(--space-4);
+}
+
+.nc-admin-zone-card {
+  display: grid;
+  gap: var(--space-3);
+  text-decoration: none;
+  color: inherit;
+}
+
+.nc-admin-zone-card:hover {
+  border-color: var(--primary);
+}
+
+.nc-admin-zone-stats {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-3);
+  font: var(--text-caption);
+  color: var(--ink-secondary);
+}
+
+.nc-admin-zone-stats strong {
+  display: block;
+  font: 700 16px/20px var(--font-sans);
+  color: var(--ink);
+}
+
+.nc-mgmt-zone-rank {
+  display: grid;
+  gap: 6px;
+}
+
+.nc-mgmt-zone-rank-row {
+  display: grid;
+  grid-template-columns: 1fr auto auto auto;
+  gap: var(--space-3);
+  align-items: center;
+  width: 100%;
+  padding: 12px 14px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--hairline);
+  background: var(--surface);
+  text-align: left;
+  cursor: pointer;
+  font: var(--text-body);
+}
+
+.nc-mgmt-zone-rank-row.is-selected {
+  background: var(--primary-tint);
+  border-color: var(--primary);
+}
+
+.nc-mgmt-zone-rank-row span:not(:first-child) {
+  font-variant-numeric: tabular-nums;
+  color: var(--ink-secondary);
+  min-width: 3.5rem;
+  text-align: right;
+}
+
+/* —— Sheet (panel lateral de detalle) —— */
+
+.nc-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  border: 0;
+  padding: 0;
+  background: rgba(15, 23, 20, 0.38);
+  cursor: pointer;
+}
+
+aside.nc-panel.nc-side.nc-sheet {
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: auto;
+  left: auto;
+  z-index: 61;
+  width: min(100vw, 520px);
+  height: 100vh;
+  display: grid;
+  align-content: start;
+  gap: var(--space-4);
+  padding: var(--space-6);
+  border-right: 0;
+  border-left: 1px solid var(--hairline);
+  background: var(--surface);
+  box-shadow: -12px 0 32px rgba(0, 0, 0, 0.16);
+  overflow-y: auto;
+}
+
+aside.nc-sheet > h2 {
+  margin: 0;
+  font: var(--text-title);
+  letter-spacing: -0.01em;
+}
+
+.nc-sheet-section {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.nc-sheet-section h3 {
+  margin: 0;
+  font: var(--text-subtitle);
+}
+
+.nc-sheet-bars {
+  display: flex;
+  align-items: flex-end;
+  gap: 6px;
+  height: 84px;
+}
+
+.nc-sheet-bar {
+  flex: 1;
+  display: flex;
+  align-items: flex-end;
+  height: 100%;
+  border-radius: 4px 4px 0 0;
+  background: var(--surface-sunken);
+}
+
+.nc-sheet-bar > span {
+  display: block;
+  width: 100%;
+  border-radius: 4px 4px 0 0;
+  background: var(--chart-1);
+}
+
+.nc-sheet-row {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: 8px 0;
+  border-bottom: 1px solid var(--hairline);
+  font: var(--text-body);
+}
+
+.nc-mgmt-table-click tbody tr,
+.nc-mgmt-day-row[role="button"],
+.nc-mgmt-prod-card[role="button"] {
+  cursor: pointer;
+}
+
+.nc-mgmt-table-click tbody tr:hover {
+  background: var(--surface-sunken);
+}
+
+/* —— Impresión (Exportar PDF de la carta / comparación) —— */
+@media print {
+  .nc-side,
+  .nc-scrim,
+  .nc-portal-actions,
+  .nc-liga-compare-bar button,
+  [role="status"] {
+    display: none !important;
+  }
+
+  .nc-desk {
+    display: block;
+    background: #fff;
+  }
+
+  .nc-portal-card {
+    break-inside: avoid;
   }
 }

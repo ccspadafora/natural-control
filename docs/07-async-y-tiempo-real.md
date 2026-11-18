@@ -40,7 +40,7 @@ Las programaciones se siembran en una migración y quedan editables desde la Con
 | `pipeline.escalate_overdue` | `*/15 * * * *` | HU-12.4 |
 | `alerts.stalled_and_churn` | `0 7 * * 1-5` | HU-16.4 |
 | `alerts.inactive_rtc` | `0 7 * * 1-5` | HU-17.5 |
-| `goals.award_achievements` | `0 4 * * *` | HU-15.2 |
+| `goals.refresh_scorecards` | diario (`86400` s / ~`0 4 * * *`) | HU-15.6 ranks + insignias |
 | `reports.ai_weekly` / `reports.ai_monthly` | `0 6 * * 1` / `0 6 1 * *` | HU-16.3 |
 | `messaging.sync_wa_templates` | `0 */6 * * *` | Estado de las plantillas |
 | `maint.backup_db` | `0 2 * * *` | `docs/09` §6 |

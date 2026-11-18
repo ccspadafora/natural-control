@@ -40,6 +40,7 @@ import {
   ProgramacionNuevaPage,
   ProgramacionPage,
 } from "./features/rtc-portal"
+import { NewClientPage } from "./features/rtc-portal/NewClientPage"
 import "@nc/ui/tokens.css"
 import "@nc/ui/fonts.css"
 import "@nc/ui/components.css"
@@ -64,14 +65,15 @@ export function App() {
       <Route path="/portal/login" element={<PortalLogin onDone={setUser} />} />
       <Route path="/consola/login" element={<PortalLogin onDone={setUser} />} />
       <Route path="/recuperar" element={<Recover />} />
-      <Route path="/portal" element={user?.role === "RTC" ? <MisNumerosPage user={user} onLogout={() => { logout(); setUser(null) }} /> : user ? <Navigate to={homeFor(user.role, "web")} replace /> : <Navigate to="/portal/login" replace />} />
-      <Route path="/portal/agenda" element={user?.role === "RTC" ? <AgendaPage user={user} onLogout={() => { logout(); setUser(null) }} /> : <Navigate to={user ? homeFor(user.role, "web") : "/portal/login"} replace />} />
-      <Route path="/portal/clientes" element={user?.role === "RTC" ? <CarteraPage user={user} onLogout={() => { logout(); setUser(null) }} /> : <Navigate to={user ? homeFor(user.role, "web") : "/portal/login"} replace />} />
-      <Route path="/portal/clientes/:id" element={user?.role === "RTC" ? <ClientDetailPage user={user} onLogout={() => { logout(); setUser(null) }} /> : <Navigate to={user ? homeFor(user.role, "web") : "/portal/login"} replace />} />
-      <Route path="/portal/forecast" element={user?.role === "RTC" ? <ForecastPage user={user} onLogout={() => { logout(); setUser(null) }} /> : <Navigate to={user ? homeFor(user.role, "web") : "/portal/login"} replace />} />
-      <Route path="/portal/programacion" element={user?.role === "RTC" ? <ProgramacionPage user={user} onLogout={() => { logout(); setUser(null) }} /> : <Navigate to={user ? homeFor(user.role, "web") : "/portal/login"} replace />} />
-      <Route path="/portal/programacion/nueva" element={user?.role === "RTC" ? <ProgramacionNuevaPage user={user} onLogout={() => { logout(); setUser(null) }} /> : <Navigate to={user ? homeFor(user.role, "web") : "/portal/login"} replace />} />
-      <Route path="/portal/micarta" element={user?.role === "RTC" ? <MiCartaPage user={user} onLogout={() => { logout(); setUser(null) }} /> : <Navigate to={user ? homeFor(user.role, "web") : "/portal/login"} replace />} />
+      <Route path="/portal" element={user?.role === "RTC" ? <MisNumerosPage user={user} onLogout={() => { logout(); setUser(null) }} /> : user ? <Navigate to={homeFor(user.role)} replace /> : <Navigate to="/portal/login" replace />} />
+      <Route path="/portal/agenda" element={user?.role === "RTC" ? <AgendaPage user={user} onLogout={() => { logout(); setUser(null) }} /> : <Navigate to={user ? homeFor(user.role) : "/portal/login"} replace />} />
+      <Route path="/portal/clientes" element={user?.role === "RTC" ? <CarteraPage user={user} onLogout={() => { logout(); setUser(null) }} /> : <Navigate to={user ? homeFor(user.role) : "/portal/login"} replace />} />
+      <Route path="/portal/clientes/nuevo" element={user?.role === "RTC" ? <NewClientPage user={user} onLogout={() => { logout(); setUser(null) }} /> : <Navigate to={user ? homeFor(user.role) : "/portal/login"} replace />} />
+      <Route path="/portal/clientes/:id" element={user?.role === "RTC" ? <ClientDetailPage user={user} onLogout={() => { logout(); setUser(null) }} /> : <Navigate to={user ? homeFor(user.role) : "/portal/login"} replace />} />
+      <Route path="/portal/forecast" element={user?.role === "RTC" ? <ForecastPage user={user} onLogout={() => { logout(); setUser(null) }} /> : <Navigate to={user ? homeFor(user.role) : "/portal/login"} replace />} />
+      <Route path="/portal/programacion" element={user?.role === "RTC" ? <ProgramacionPage user={user} onLogout={() => { logout(); setUser(null) }} /> : <Navigate to={user ? homeFor(user.role) : "/portal/login"} replace />} />
+      <Route path="/portal/programacion/nueva" element={user?.role === "RTC" ? <ProgramacionNuevaPage user={user} onLogout={() => { logout(); setUser(null) }} /> : <Navigate to={user ? homeFor(user.role) : "/portal/login"} replace />} />
+      <Route path="/portal/micarta" element={user?.role === "RTC" ? <MiCartaPage user={user} onLogout={() => { logout(); setUser(null) }} /> : <Navigate to={user ? homeFor(user.role) : "/portal/login"} replace />} />
       <Route
         path="/consola"
         element={
@@ -97,6 +99,16 @@ export function App() {
             <PortfolioPage user={user} onLogout={() => { logout(); setUser(null) }} />
           ) : (
             <Navigate to={user ? "/consola" : "/consola/login"} replace />
+          )
+        }
+      />
+      <Route
+        path="/consola/clientes/nuevo"
+        element={
+          user && user.role !== "RTC" && user.permissions.includes("clients.create") ? (
+            <NewClientPage user={user} onLogout={() => { logout(); setUser(null) }} />
+          ) : (
+            <Navigate to={user ? "/consola/clientes" : "/consola/login"} replace />
           )
         }
       />
@@ -183,50 +195,50 @@ export function App() {
       <Route
         path="/consola/embudo"
         element={
-          user && user.role !== "RTC" ? (
+          user && user.role !== "RTC" && user.features.pipeline ? (
             <EmbudoPage user={user} onLogout={() => { logout(); setUser(null) }} />
           ) : (
-            <Navigate to={user ? homeFor(user.role, "web") : "/consola/login"} replace />
+            <Navigate to={user ? homeFor(user.role) : "/consola/login"} replace />
           )
         }
       />
       <Route
         path="/consola/mensajes"
         element={
-          user && user.role !== "RTC" ? (
+          user && user.role !== "RTC" && user.features.whatsapp ? (
             <MensajesPage user={user} onLogout={() => { logout(); setUser(null) }} />
           ) : (
-            <Navigate to={user ? homeFor(user.role, "web") : "/consola/login"} replace />
+            <Navigate to={user ? homeFor(user.role) : "/consola/login"} replace />
           )
         }
       />
       <Route
         path="/consola/automatizaciones"
         element={
-          user && user.role !== "RTC" ? (
+          user && user.role !== "RTC" && user.features.automation ? (
             <AutomatizacionesPage user={user} onLogout={() => { logout(); setUser(null) }} />
           ) : (
-            <Navigate to={user ? homeFor(user.role, "web") : "/consola/login"} replace />
+            <Navigate to={user ? homeFor(user.role) : "/consola/login"} replace />
           )
         }
       />
       <Route
         path="/consola/erp"
         element={
-          user && (user.role === "ADMIN" || user.role === "ADMIN_PRODUCTO") ? (
+          user && (user.role === "ADMIN" || user.role === "ADMIN_PRODUCTO") && user.features.erp ? (
             <ErpPage user={user} onLogout={() => { logout(); setUser(null) }} />
           ) : (
-            <Navigate to={user ? homeFor(user.role, "web") : "/consola/login"} replace />
+            <Navigate to={user ? homeFor(user.role) : "/consola/login"} replace />
           )
         }
       />
       <Route
         path="/consola/informes"
         element={
-          user && (user.role === "ADMIN" || user.role === "ADMIN_PRODUCTO") ? (
+          user && (user.role === "ADMIN" || user.role === "ADMIN_PRODUCTO") && user.features.ai_reports ? (
             <InformesPage user={user} onLogout={() => { logout(); setUser(null) }} />
           ) : (
-            <Navigate to={user ? homeFor(user.role, "web") : "/consola/login"} replace />
+            <Navigate to={user ? homeFor(user.role) : "/consola/login"} replace />
           )
         }
       />
@@ -236,7 +248,7 @@ export function App() {
           user && user.permissions.includes("audit.view") ? (
             <AuditoriaPage user={user} onLogout={() => { logout(); setUser(null) }} />
           ) : (
-            <Navigate to={user ? homeFor(user.role, "web") : "/consola/login"} replace />
+            <Navigate to={user ? homeFor(user.role) : "/consola/login"} replace />
           )
         }
       />
@@ -246,7 +258,7 @@ export function App() {
           user && (user.role === "ADMIN" || user.role === "ADMIN_PRODUCTO") ? (
             <CapacitacionPage user={user} onLogout={() => { logout(); setUser(null) }} />
           ) : (
-            <Navigate to={user ? homeFor(user.role, "web") : "/consola/login"} replace />
+            <Navigate to={user ? homeFor(user.role) : "/consola/login"} replace />
           )
         }
       />
@@ -258,7 +270,7 @@ export function App() {
 
 function Gate({ role }: { role?: string }) {
   if (!role) return <Navigate to="/consola/login" replace />
-  return <Navigate to={homeFor(role, "web")} replace />
+  return <Navigate to={homeFor(role)} replace />
 }
 
 function Recover() {

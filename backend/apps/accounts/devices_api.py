@@ -10,9 +10,14 @@ from apps.core.exceptions import NcError
 
 
 def _device_row(device: Device) -> dict:
+    user = getattr(device, "user", None)
+    name = ""
+    if user is not None:
+        name = f"{user.first_name} {user.last_name}".strip() or user.email
     return {
         "id": str(device.id),
         "user_id": str(device.user_id),
+        "user_name": name,
         "label": device.label,
         "platform": device.platform,
         "last_used_at": device.last_used_at.isoformat() if device.last_used_at else None,

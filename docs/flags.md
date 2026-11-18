@@ -4,12 +4,12 @@ Valores por defecto en `backend/apps/core/seed.py`. La sesión expone cada clave
 
 | Clave | Default seed | Descripción breve |
 |---|---|---|
-| `feature.erp` | `false` | Integración ERP / conciliación |
+| `feature.erp` | `false` | Integración ERP — fase comercial posterior |
 | `feature.offline` | `true` | Outbox Campo + `POST /sync/mutations` |
-| `feature.pipeline` | `false` | Embudo comercial |
-| `feature.whatsapp` | `false` | Mensajería WhatsApp |
-| `feature.automation` | `false` | Automatizaciones post-visita |
-| `feature.ai_reports` | `false` | Informes con modelo |
+| `feature.pipeline` | `false` | Embudo — fase comercial posterior |
+| `feature.whatsapp` | `false` | WhatsApp Business API — fase comercial posterior |
+| `feature.automation` | `false` | Automatizaciones post-visita — fase comercial posterior |
+| `feature.ai_reports` | `false` | Informes con modelo — fase comercial posterior |
 | `feature.gamification` | `false` | Liga y logros |
 | `feature.mfa` | `false` | Doble factor |
 | `feature.webauthn` | `false` | Biometría / passkeys |

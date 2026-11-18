@@ -1,7 +1,7 @@
 import { FormEvent, useEffect, useState } from "react"
 import { Link, useNavigate } from "react-router-dom"
 import { api } from "@nc/api"
-import { Button, TextField } from "@nc/ui"
+import { Button, Icon, TextField } from "@nc/ui"
 
 type Item = {
   id: string
@@ -105,45 +105,77 @@ export function Programacion() {
     }
   }
 
-  if (!current && !error) return <p className="nc-kicker">Cargando…</p>
+  if (!current && !error) {
+    return (
+      <>
+        <header className="nc-campo-head">
+          <div className="nc-campo-head-row">
+            <Link to="/" className="nc-campo-icon-btn" aria-label="Volver">
+              <Icon name="chevronLeft" />
+            </Link>
+            <h1>Programación</h1>
+          </div>
+        </header>
+        <p className="nc-kicker">Cargando…</p>
+      </>
+    )
+  }
   if (!current?.required) {
     return (
-      <section className="nc-page">
-        <h1>Programación</h1>
-        <p className="nc-kicker">Gerencia no te está pidiendo la programación.</p>
-      </section>
+      <>
+        <header className="nc-campo-head">
+          <div className="nc-campo-head-row">
+            <Link to="/" className="nc-campo-icon-btn" aria-label="Volver">
+              <Icon name="chevronLeft" />
+            </Link>
+            <h1>Programación</h1>
+          </div>
+        </header>
+        <section className="nc-campo-page">
+          <p className="nc-kicker">Gerencia no te está pidiendo la programación.</p>
+        </section>
+      </>
     )
   }
 
   const plan = current.plan
   const notice = planNotice(current)
   return (
-    <section className="nc-page">
-      <h1>Semana {current.iso_week}</h1>
-      <p className="nc-kicker">{day(current.week_start)} a {day(current.week_end)}. Plazo: {hour(current.deadline_at)}.</p>
-      {notice ? <p className="nc-note">{notice}</p> : null}
-      {plan && !plan.editable ? <p className="nc-ok">{plan.is_late ? "Quedó enviada tarde. Las visitas ya están en tu agenda." : "Quedó enviada. Las visitas ya están en tu agenda."}</p> : null}
-      {error ? <p className="nc-note">{error}</p> : null}
-      <ul className="nc-list">
-        {plan && plan.items.length === 0 ? <li className="nc-kicker">Todavía no hay visitas en esta semana.</li> : null}
-        {plan?.items.map((item) => (
-          <li key={item.id} className="nc-card">
-            <span className="nc-row">
-              <strong>{item.client_name}</strong>
-              {plan.editable ? <button type="button" className="nc-text-link" onClick={() => remove(item)}>Quitar</button> : null}
-            </span>
-            <span>{day(item.planned_date)} · {SLOT[item.slot] || item.slot}{item.reason ? ` · ${item.reason}` : ""}</span>
-            {item.objective ? <span>{item.objective}</span> : null}
-          </li>
-        ))}
-      </ul>
-      {plan?.editable ? (
-        <span className="nc-row">
-          <Link className="nc-btn nc-btn-secondary" to="/programacion/nueva">Agregar visita</Link>
-          <Button type="button" onClick={send} disabled={busy}>{busy ? "Enviando…" : "Enviar programación"}</Button>
-        </span>
-      ) : plan ? <p className="nc-kicker">{STATUS[plan.status] || plan.status}</p> : null}
-    </section>
+    <>
+      <header className="nc-campo-head">
+        <div className="nc-campo-head-row">
+          <Link to="/" className="nc-campo-icon-btn" aria-label="Volver">
+            <Icon name="chevronLeft" />
+          </Link>
+          <h1>Semana {current.iso_week}</h1>
+        </div>
+      </header>
+      <section className="nc-campo-page">
+        <p className="nc-kicker">{day(current.week_start)} a {day(current.week_end)}. Plazo: {hour(current.deadline_at)}.</p>
+        {notice ? <p className="nc-note">{notice}</p> : null}
+        {plan && !plan.editable ? <p className="nc-ok">{plan.is_late ? "Quedó enviada tarde. Las visitas ya están en tu agenda." : "Quedó enviada. Las visitas ya están en tu agenda."}</p> : null}
+        {error ? <p className="nc-note">{error}</p> : null}
+        <ul className="nc-list">
+          {plan && plan.items.length === 0 ? <li className="nc-kicker">Todavía no hay visitas en esta semana.</li> : null}
+          {plan?.items.map((item) => (
+            <li key={item.id} className="nc-card">
+              <span className="nc-row">
+                <strong>{item.client_name}</strong>
+                {plan.editable ? <button type="button" className="nc-text-link" onClick={() => remove(item)}>Quitar</button> : null}
+              </span>
+              <span>{day(item.planned_date)} · {SLOT[item.slot] || item.slot}{item.reason ? ` · ${item.reason}` : ""}</span>
+              {item.objective ? <span>{item.objective}</span> : null}
+            </li>
+          ))}
+        </ul>
+        {plan?.editable ? (
+          <span className="nc-row">
+            <Link className="nc-btn nc-btn-secondary" to="/programacion/nueva">Agregar visita</Link>
+            <Button type="button" onClick={send} disabled={busy}>{busy ? "Enviando…" : "Enviar programación"}</Button>
+          </span>
+        ) : plan ? <p className="nc-kicker">{STATUS[plan.status] || plan.status}</p> : null}
+      </section>
+    </>
   )
 }
 
@@ -209,8 +241,16 @@ export function NewPlanItem() {
   }
 
   return (
-    <section className="nc-page">
-      <h1>Agregar visita</h1>
+    <>
+      <header className="nc-campo-head">
+        <div className="nc-campo-head-row">
+          <Link to="/programacion" className="nc-campo-icon-btn" aria-label="Volver">
+            <Icon name="chevronLeft" />
+          </Link>
+          <h1>Agregar visita</h1>
+        </div>
+      </header>
+      <section className="nc-campo-page">
       <p className="nc-kicker">Tiene que caer entre el {current ? day(current.week_start) : "lunes"} y el {current ? day(current.week_end) : "domingo"}.</p>
       <form className="nc-form" onSubmit={submit}>
         <label className="nc-field">
@@ -248,6 +288,7 @@ export function NewPlanItem() {
         {error ? <p className="nc-note">{error}</p> : null}
         <Button type="submit" block disabled={busy || !current?.plan}>{busy ? "Guardando…" : "Agregar"}</Button>
       </form>
-    </section>
+      </section>
+    </>
   )
 }

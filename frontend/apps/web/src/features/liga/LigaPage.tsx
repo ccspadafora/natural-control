@@ -1,25 +1,15 @@
-import { useMemo, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import type { SessionUser } from "@nc/domain"
-import { Button, FilterPills, Icon, PageHead, Tabs } from "@nc/ui"
+import { Button, FilterPills, Icon, PageHead, Tabs, TOAST } from "@nc/ui"
 import { LeaderPortalPage } from "../leader/LeaderPortalPage"
 import { isGerencia } from "../mgmt/shared/roles"
 import { mgmtScopeWord } from "../mgmt/shared/scope"
 import { LeagueRadar } from "./components/LeagueRadar"
 import { PlayerCard } from "./components/PlayerCard"
-import {
-  LEAGUE_BADGES,
-  LEAGUE_BY_ID,
-  LEAGUE_RTCS,
-  LEAGUE_ZONES,
-  attrCompareTable,
-  bottomThird,
-  compareOptions,
-  leaderZoneScope,
-  pitchRows,
-  rankedLeague,
-  zoneAverageAttrs,
-  type LeagueRtc,
-} from "./shared/leagueData"
+import { ATTR, attrCompareTable, mapPlayer, periodEyebrow, type LeagueRtc } from "./shared/leagueMap"
+import { useExport } from "../mgmt/shared/useMetrics"
+import { useLeagueBoard } from "./shared/useLeague"
+import { useToast } from "../shared/useToast"
 
 const LIGA_TABS = [
   { id: "liga", label: "Liga" },
@@ -31,43 +21,72 @@ const LIGA_TABS = [
 export function LigaPage({ user, onLogout }: { user: SessionUser; onLogout: () => void }) {
   const [tab, setTab] = useState("liga")
   const [zoneFilter, setZoneFilter] = useState("all")
-  const [selectedRtcId, setSelectedRtcId] = useState("cr")
-  const [cmpA, setCmpA] = useState("cr")
+  const [selectedId, setSelectedId] = useState<string>("")
+  const [cmpA, setCmpA] = useState("")
   const [cmpB, setCmpB] = useState("zona")
+  const toast = useToast()
+  const exporter = useExport()
 
-  const scopeRtcIds = useMemo(() => {
-    if (isGerencia(user.role)) return undefined
-    const zones = new Set(leaderZoneScope())
-    return new Set(LEAGUE_RTCS.filter((r) => zones.has(r.z)).map((r) => r.id))
-  }, [user.role])
+  const { data, error, loading } = useLeagueBoard(zoneFilter)
+
+  const players = useMemo(() => (data?.results || []).map((r) => mapPlayer(r, r.pos)), [data])
+  const byId = useMemo(() => Object.fromEntries(players.map((p) => [p.id, p])) as Record<string, LeagueRtc>, [players])
+  const graded = useMemo(() => players.filter((p) => p.a), [players])
+
+  useEffect(() => {
+    if (!players.length) return
+    if (!selectedId || !byId[selectedId]) setSelectedId(players[0].id)
+    if (!cmpA || !byId[cmpA]) setCmpA(graded[0]?.id || players[0].id)
+  }, [players, byId, selectedId, cmpA, graded])
 
   const zonePills = useMemo(() => {
     const nationalLabel = isGerencia(user.role) ? "Nacional" : "Mi equipo"
     const base = [{ id: "all", label: nationalLabel }]
-    const zones = isGerencia(user.role) ? LEAGUE_ZONES : LEAGUE_ZONES.filter((z) => leaderZoneScope().includes(z.id))
+    const zones = data?.zones || []
     return base.concat(zones.map((z) => ({ id: z.id, label: z.name })))
-  }, [user.role])
+  }, [user.role, data])
 
-  const leagueRows = useMemo(() => rankedLeague(scopeRtcIds, zoneFilter), [scopeRtcIds, zoneFilter])
-  const bottom = useMemo(() => bottomThird(leagueRows), [leagueRows])
+  const day = data?.day || 1
+  const days = data?.days_in_month || 31
+  const cartaRtc = byId[selectedId] || players[0]
+  const cmpRtc = byId[cmpA] || graded[0] || players[0]
 
-  const cartaRtc = LEAGUE_BY_ID[selectedRtcId] || LEAGUE_RTCS[0]
-  const cmpRtc = LEAGUE_BY_ID[cmpA] || LEAGUE_RTCS[0]
-  const cmpBVals = cmpB === "zona" ? zoneAverageAttrs(cmpA) : LEAGUE_BY_ID[cmpB]?.a || [0, 0, 0, 0, 0, 0]
-  const cmpBName = cmpB === "zona" ? `Promedio ${cmpRtc.zoneName}` : LEAGUE_BY_ID[cmpB]?.name || "—"
+  const zoneAvgFor = (rtc: LeagueRtc | undefined) => {
+    if (!rtc || !data) return [0, 0, 0, 0, 0, 0]
+    const peers = players.filter((p) => p.z === rtc.z && p.a)
+    if (!peers.length) return [0, 0, 0, 0, 0, 0]
+    return ATTR.map((_, i) => Math.round(peers.reduce((t, r) => t + (r.a?.[i] || 0), 0) / peers.length))
+  }
 
-  const cartaCompareVals = zoneAverageAttrs(cartaRtc.id)
+  const cartaCompareVals = cartaRtc ? zoneAvgFor(cartaRtc) : [0, 0, 0, 0, 0, 0]
+  const cmpBVals =
+    cmpB === "zona" ? zoneAvgFor(cmpRtc) : byId[cmpB]?.a || [0, 0, 0, 0, 0, 0]
+  const cmpBName = cmpB === "zona" ? `Promedio ${cmpRtc?.zoneName || ""}` : byId[cmpB]?.name || "—"
+
   const attrTable = useMemo(
-    () => attrCompareTable(cartaRtc, cartaCompareVals, `Promedio ${cartaRtc.zoneName}`),
-    [cartaRtc],
+    () => (cartaRtc ? attrCompareTable(cartaRtc, cartaCompareVals, `Promedio ${cartaRtc.zoneName}`, day, days) : []),
+    [cartaRtc, cartaCompareVals, day, days],
   )
   const cmpAttrTable = useMemo(
-    () => attrCompareTable(cmpRtc, cmpBVals, cmpBName),
-    [cmpRtc, cmpBVals, cmpBName],
+    () => (cmpRtc ? attrCompareTable(cmpRtc, cmpBVals, cmpBName, day, days) : []),
+    [cmpRtc, cmpBVals, cmpBName, day, days],
   )
 
+  const pitchRows = useMemo(() => {
+    const pitch = (data?.ideal_pitch || []).map((p) => ({
+      k: p.k,
+      n: p.n,
+      name: p.name,
+      value: p.value,
+      zone: p.zone,
+      border: p.tier_border,
+      bg: p.tier_bg,
+    }))
+    return [pitch.slice(0, 1), pitch.slice(1, 3), pitch.slice(3, 6)]
+  }, [data])
+
   function openCarta(rtc: LeagueRtc) {
-    setSelectedRtcId(rtc.id)
+    setSelectedId(rtc.id)
     setTab("carta")
   }
 
@@ -75,13 +94,18 @@ export function LigaPage({ user, onLogout }: { user: SessionUser; onLogout: () =
     <LeaderPortalPage user={user} onLogout={onLogout}>
       <header className="nc-portal-page-head">
         <div className="nc-portal-hero">
-          <span className="nc-portal-eyebrow">Octubre 2026 · GEN de 0 a 99</span>
+          <span className="nc-portal-eyebrow">
+            {data ? periodEyebrow(data.period_start, data.day) : "Liga de RTC"}
+          </span>
           <PageHead title="Liga de RTC" description={mgmtScopeWord(user)} />
         </div>
         <Tabs items={LIGA_TABS} value={tab} onChange={setTab} label="Liga" />
       </header>
 
-      {tab === "liga" ? (
+      {error ? <p className="nc-portal-muted">{error}</p> : null}
+      {loading && !data ? <p className="nc-portal-muted">Cargando liga…</p> : null}
+
+      {tab === "liga" && data ? (
         <div className="nc-portal-stack">
           <FilterPills items={zonePills} value={zoneFilter} onChange={setZoneFilter} />
           <div className="nc-liga-layout">
@@ -100,7 +124,7 @@ export function LigaPage({ user, onLogout }: { user: SessionUser; onLogout: () =
                   </tr>
                 </thead>
                 <tbody>
-                  {leagueRows.map((row) => (
+                  {players.map((row) => (
                     <tr key={row.id} className="nc-liga-row" onClick={() => openCarta(row)}>
                       <td>
                         <div className="nc-liga-pos">
@@ -142,11 +166,11 @@ export function LigaPage({ user, onLogout }: { user: SessionUser; onLogout: () =
               <section className="nc-portal-card">
                 <h2>Insignias del mes</h2>
                 <ul className="nc-liga-badges">
-                  {LEAGUE_BADGES.map((b) => (
-                    <li key={b.badge}>
-                      <span className="nc-liga-badge-name">{b.badge}</span>
+                  {data.badges.map((b) => (
+                    <li key={b.code}>
+                      <span className="nc-liga-badge-name">{b.title}</span>
                       <span>
-                        {b.name} <span className="nc-portal-muted">· {b.why}</span>
+                        {b.name} <span className="nc-portal-muted">· {b.reason}</span>
                       </span>
                     </li>
                   ))}
@@ -155,8 +179,8 @@ export function LigaPage({ user, onLogout }: { user: SessionUser; onLogout: () =
               <section className="nc-portal-card">
                 <h2>Tercio inferior · qué trabajar</h2>
                 <ul className="nc-liga-bottom">
-                  {bottom.map((b) => (
-                    <li key={b.name}>
+                  {data.bottom_third.map((b) => (
+                    <li key={b.user_id}>
                       <strong>
                         {b.name} · {b.attr} {b.value}
                       </strong>
@@ -170,12 +194,12 @@ export function LigaPage({ user, onLogout }: { user: SessionUser; onLogout: () =
         </div>
       ) : null}
 
-      {tab === "carta" ? (
+      {tab === "carta" && cartaRtc ? (
         <div className="nc-portal-stack">
           <FilterPills
-            items={compareOptions().map((o) => ({ id: o.id, label: o.name }))}
-            value={selectedRtcId}
-            onChange={setSelectedRtcId}
+            items={graded.map((o) => ({ id: o.id, label: o.name }))}
+            value={selectedId}
+            onChange={setSelectedId}
           />
           <div className="nc-portal-split">
             <PlayerCard rtc={cartaRtc} />
@@ -193,7 +217,7 @@ export function LigaPage({ user, onLogout }: { user: SessionUser; onLogout: () =
       {tab === "campo" ? (
         <div className="nc-liga-pitch">
           <span className="nc-portal-eyebrow">Once ideal · el mejor en cada atributo</span>
-          {pitchRows().map((row, idx) => (
+          {pitchRows.map((row, idx) => (
             <div key={idx} className="nc-liga-pitch-row">
               {row.map((p) => (
                 <div key={p.k} className="nc-liga-pitch-card" style={{ borderColor: p.border, background: p.bg }}>
@@ -208,13 +232,13 @@ export function LigaPage({ user, onLogout }: { user: SessionUser; onLogout: () =
         </div>
       ) : null}
 
-      {tab === "cara" ? (
+      {tab === "cara" && cmpRtc ? (
         <div className="nc-portal-stack">
           <div className="nc-liga-compare-bar">
             <label className="nc-liga-select-wrap">
               <span className="nc-portal-muted">Comercial</span>
               <select className="nc-liga-select" value={cmpA} onChange={(e) => setCmpA(e.target.value)}>
-                {compareOptions().map((o) => (
+                {graded.map((o) => (
                   <option key={o.id} value={o.id}>
                     {o.name}
                   </option>
@@ -226,7 +250,7 @@ export function LigaPage({ user, onLogout }: { user: SessionUser; onLogout: () =
               <span className="nc-portal-muted">Referencia</span>
               <select className="nc-liga-select" value={cmpB} onChange={(e) => setCmpB(e.target.value)}>
                 <option value="zona">Promedio de su zona</option>
-                {compareOptions()
+                {graded
                   .filter((o) => o.id !== cmpA)
                   .map((o) => (
                     <option key={o.id} value={o.id}>
@@ -236,8 +260,24 @@ export function LigaPage({ user, onLogout }: { user: SessionUser; onLogout: () =
               </select>
             </label>
             <div className="nc-liga-compare-spacer" />
-            <Button type="button" variant="secondary" disabled title="Disponible cuando el backend genere PDFs">
-              Exportar PDF
+            <Button
+              type="button"
+              variant="secondary"
+              disabled={exporter.busy}
+              onClick={() => {
+                void (async () => {
+                  toast.show("Generando el PDF…", "neutral")
+                  const ok = await exporter.start("LEAGUE_PDF", {
+                    zone: zoneFilter === "all" ? null : zoneFilter,
+                    compare_a_name: cmpRtc?.name,
+                    compare_b_name: cmpBName,
+                    attr_rows: cmpAttrTable,
+                  })
+                  toast.show(ok ? TOAST.exportReady : TOAST.genericError, ok ? "success" : "danger")
+                })()
+              }}
+            >
+              {exporter.busy ? "Generando…" : "Exportar PDF"}
             </Button>
           </div>
           <div className="nc-portal-split">
@@ -252,14 +292,15 @@ export function LigaPage({ user, onLogout }: { user: SessionUser; onLogout: () =
           <AttrTable rows={cmpAttrTable} colA={cmpRtc.name} colB={cmpBName} />
         </div>
       ) : null}
+      {toast.node}
     </LeaderPortalPage>
   )
 }
 
 function FormIcon({ form }: { form: "up" | "flat" | "down" }) {
-  if (form === "up") return <Icon name="arrowUp" size={14} />
-  if (form === "down") return <Icon name="arrowDown" size={14} />
-  return <Icon name="minus" size={14} />
+  if (form === "up") return <Icon name="arrowUp" small />
+  if (form === "down") return <Icon name="arrowDown" small />
+  return <Icon name="minus" small />
 }
 
 function AttrTable({

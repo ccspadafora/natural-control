@@ -3,7 +3,9 @@ import { useNavigate, useParams } from "react-router-dom"
 import { api } from "@nc/api"
 import type { SessionUser } from "@nc/domain"
 import { Badge, Button, GpsCheck, PageHead, TextField } from "@nc/ui"
+import { GeoMap } from "./GeoMap"
 import { LeaderPortalPage } from "./LeaderPortalPage"
+import { LocationChangesPanel } from "./LocationChangesPanel"
 import {
   accuracyLabel,
   canReview,
@@ -92,25 +94,16 @@ export function GeoReviewPage({ user, onLogout }: { user: SessionUser; onLogout:
             />
           </div>
 
-          <div className="nc-geo-map" aria-hidden="true">
-            {row.reference ? (
-              <>
-                <span className="nc-geo-map-tolerance" style={{ width: 120, height: 120, margin: "-60px 0 0 -60px" }} />
-                <span className="nc-geo-map-ref" title="Sede registrada" />
-                <span className="nc-geo-map-ref-label">Sede registrada</span>
-              </>
-            ) : null}
-            {row.position ? <span className="nc-geo-map-real" title="Dónde se registró" /> : null}
-            {!row.position ? <span className="nc-geo-map-nogps">Sin ubicación del dispositivo</span> : null}
-            <span className="nc-geo-map-legend">
-              Círculo: tolerancia de la zona ·{" "}
-              <span className="nc-geo-map-legend-dot" /> Dónde se registró
-            </span>
-          </div>
+          <GeoMap
+            reference={row.reference}
+            position={row.position}
+            toleranceM={row.tolerance_m}
+            distanceM={row.distance_m}
+          />
 
           {map ? (
             <a className="nc-text-link" href={map} target="_blank" rel="noreferrer">
-              Ver punto real y sede en el mapa
+              Ver punto real y sede en OpenStreetMap
             </a>
           ) : null}
 
@@ -159,10 +152,7 @@ export function GeoReviewPage({ user, onLogout }: { user: SessionUser; onLogout:
         </div>
       ) : null}
 
-      <div className="nc-portal-card nc-geo-loc-stub nc-geo-loc-stub--detail">
-        <h2 className="nc-portal-card-title">Cambios de ubicación por aprobar</h2>
-        <p className="nc-portal-muted">Próximamente: solicitudes de cambio de sede del equipo.</p>
-      </div>
+      <LocationChangesPanel compact />
     </LeaderPortalPage>
   )
 }

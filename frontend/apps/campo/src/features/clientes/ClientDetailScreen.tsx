@@ -2,7 +2,9 @@ import { useEffect, useState } from "react"
 import { useNavigate, useParams } from "react-router-dom"
 import { api } from "@nc/api"
 import { formatMoney } from "@nc/domain"
-import { Badge, Button, Icon, type BadgeTone } from "@nc/ui"
+import { Badge, Button, Icon, TextField, type BadgeTone } from "@nc/ui"
+import { getCachedClient, isOfflineMode, listCachedProducts } from "../../offline"
+import { SiteMap } from "./SiteMap"
 
 type Site = {
   id: string
@@ -54,18 +56,71 @@ export function ClientDetailScreen() {
   const [priceList, setPriceList] = useState("")
   const [error, setError] = useState("")
   const [busy, setBusy] = useState(false)
+  const [locOpen, setLocOpen] = useState(false)
+  const [locReason, setLocReason] = useState("")
+  const [locBusy, setLocBusy] = useState(false)
+  const [locMsg, setLocMsg] = useState("")
 
   useEffect(() => {
     if (!id) return
-    api<Detail>(`/api/v1/clients/${id}`)
-      .then(setClient)
-      .catch((err) => setError(err instanceof Error ? err.message : "No se pudo abrir el cliente"))
-    api<{ results: ProductRow[]; price_list: string | null }>(`/api/v1/products?client=${id}`)
-      .then((data) => {
+    let alive = true
+
+    async function load() {
+      if (isOfflineMode()) {
+        const cached = (await getCachedClient(id!)) as (Detail & Record<string, unknown>) | null
+        if (!alive) return
+        if (cached) {
+          setClient({
+            ...cached,
+            document:
+              cached.document ||
+              `${String(cached.document_type || "")} ${String(cached.document_number || "")}`.trim(),
+            status_label: cached.status_label || cached.status,
+            status_tone: cached.status_tone || "neutral",
+            sites: cached.sites || [],
+            crops: cached.crops || [],
+            biotechs: cached.biotechs || [],
+            history: cached.history || [],
+            contact_name: cached.contact_name || "",
+          })
+          setProducts(((await listCachedProducts()) as ProductRow[]).slice(0, 6))
+          setPriceList(String(cached.price_list || ""))
+        } else {
+          setError("Cliente no está en la caché local.")
+        }
+        return
+      }
+      try {
+        const detail = await api<Detail>(`/api/v1/clients/${id}`)
+        if (!alive) return
+        setClient(detail)
+        setError("")
+      } catch (err) {
+        const cached = (await getCachedClient(id!)) as Detail | null
+        if (!alive) return
+        if (cached) {
+          setClient(cached)
+          setError("Mostrando ficha en caché.")
+        } else {
+          setError(err instanceof Error ? err.message : "No se pudo abrir el cliente")
+        }
+      }
+      try {
+        const data = await api<{ results: ProductRow[]; price_list: string | null }>(`/api/v1/products?client=${id}`)
+        if (!alive) return
         setProducts(data.results.slice(0, 6))
         setPriceList(data.price_list || "")
-      })
-      .catch(() => setProducts([]))
+      } catch {
+        const products = (await listCachedProducts()) as ProductRow[]
+        if (!alive) return
+        setProducts(products.slice(0, 6))
+      }
+    }
+
+    void load()
+    return () => {
+      alive = false
+    }
   }, [id])
 
   async function startVisit() {
@@ -82,6 +137,50 @@ export function ClientDetailScreen() {
       setError(err instanceof Error ? err.message : "No se pudo abrir la visita")
       setBusy(false)
     }
+  }
+
+  async function submitLocationChange() {
+    const site = client?.sites[0]
+    if (!site) return
+    if (locReason.trim().length < 5) {
+      setLocMsg("Explica por qué hay que mover la sede.")
+      return
+    }
+    if (!navigator.geolocation) {
+      setLocMsg("Este navegador no entrega la ubicación.")
+      return
+    }
+    setLocBusy(true)
+    setLocMsg("")
+    navigator.geolocation.getCurrentPosition(
+      async (position) => {
+        try {
+          await api("/api/v1/location-changes/create", {
+            method: "POST",
+            body: JSON.stringify({
+              site_id: site.id,
+              latitude: position.coords.latitude,
+              longitude: position.coords.longitude,
+              accuracy_m: position.coords.accuracy,
+              reason: locReason.trim(),
+            }),
+          })
+          setLocMsg("Solicitud enviada. Tu líder la revisará.")
+          setLocReason("")
+          setLocOpen(false)
+          setError("")
+        } catch (err) {
+          setLocMsg(err instanceof Error ? err.message : "No se pudo enviar la solicitud")
+        } finally {
+          setLocBusy(false)
+        }
+      },
+      () => {
+        setLocMsg("No pudimos leer el GPS. Intenta parado en la sede.")
+        setLocBusy(false)
+      },
+      { enableHighAccuracy: true, timeout: 15000 },
+    )
   }
 
   if (error && !client) return <p className="nc-note">{error}</p>
@@ -178,14 +277,24 @@ export function ClientDetailScreen() {
 
         <section className="nc-campo-panel">
           <h3 className="nc-campo-panel-title">Sede principal</h3>
-          <div className="nc-campo-map-stub" aria-hidden="true">
-            <span className="nc-campo-map-pin" />
-          </div>
+          {site?.latitude != null && site?.longitude != null ? (
+            <SiteMap latitude={site.latitude} longitude={site.longitude} label={site.name} />
+          ) : (
+            <div className="nc-campo-map-stub" aria-hidden="true">
+              <span className="nc-campo-map-pin" />
+            </div>
+          )}
           <span className="nc-campo-mono">
             {coords || "Sin coordenadas"}
             {site?.location_locked ? " · ubicación bloqueada" : ""}
             {site?.name ? ` · ${site.name}` : ""}
           </span>
+          {site?.location_locked ? (
+            <Button variant="quiet" icon="pinOff" onClick={() => { setLocOpen(true); setLocMsg("") }}>
+              Pedir cambio de ubicación
+            </Button>
+          ) : null}
+          {locMsg && !locOpen ? <p className="nc-campo-section-meta">{locMsg}</p> : null}
         </section>
 
         <section className="nc-campo-ficha-history">
@@ -232,6 +341,40 @@ export function ClientDetailScreen() {
           {busy ? "Abriendo…" : "Registrar visita"}
         </Button>
       </div>
+
+      {locOpen ? (
+        <div
+          className="nc-campo-bottom-sheet"
+          role="presentation"
+          onClick={() => !locBusy && setLocOpen(false)}
+        >
+          <div
+            className="nc-campo-bottom-sheet-panel"
+            role="dialog"
+            aria-label="Pedir cambio de ubicación"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <span className="nc-campo-sheet-handle" />
+            <h2 className="nc-campo-section-title">Pedir cambio de ubicación</h2>
+            <p className="nc-campo-section-meta" style={{ margin: 0 }}>
+              Toma el GPS parado en la sede correcta. Tu líder aprueba el cambio.
+            </p>
+            <TextField
+              label="Motivo"
+              value={locReason}
+              onChange={(event) => setLocReason(event.target.value)}
+              helper="Ej.: La finca se mudó a la bodega del pueblo"
+            />
+            {locMsg ? <p className="nc-note">{locMsg}</p> : null}
+            <Button size="lg" block icon="crosshair" disabled={locBusy} onClick={() => void submitLocationChange()}>
+              {locBusy ? "Enviando…" : "Tomar GPS y enviar"}
+            </Button>
+            <Button variant="quiet" block disabled={locBusy} onClick={() => setLocOpen(false)}>
+              Cancelar
+            </Button>
+          </div>
+        </div>
+      ) : null}
     </>
   )
 }

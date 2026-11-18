@@ -163,7 +163,8 @@ def reassign_visit(actor, visit_id, rtc_id) -> Visit:
     return visit
 
 
-def agenda(user, day: datetime, view: str):
+def agenda(user, day: datetime, view: str, *, end_day: datetime | None = None):
+    """Visitas de agenda. Si `end_day` se pasa, el rango es [day 00:00, end_day+1 00:00)."""
     from apps.core.scoping import scope_queryset
 
     qs = scope_queryset(
@@ -173,11 +174,17 @@ def agenda(user, day: datetime, view: str):
     )
     local = timezone.localtime(day)
     start = local.replace(hour=0, minute=0, second=0, microsecond=0)
-    end = start + timedelta(days=1)
+    if end_day is not None:
+        end_local = timezone.localtime(end_day).replace(hour=0, minute=0, second=0, microsecond=0)
+        end = end_local + timedelta(days=1)
+    else:
+        end = start + timedelta(days=1)
     if view == "pending":
         qs = qs.filter(status__in=[VisitStatus.PROGRAMADA, VisitStatus.EN_CURSO], scheduled_start__lt=end)
     elif view == "done":
         qs = qs.filter(status=VisitStatus.REALIZADA, scheduled_start__gte=start, scheduled_start__lt=end)
+    elif view == "range":
+        qs = qs.filter(scheduled_start__gte=start, scheduled_start__lt=end).exclude(status=VisitStatus.CANCELADA)
     else:
         qs = qs.filter(scheduled_start__gte=start, scheduled_start__lt=end).exclude(status=VisitStatus.CANCELADA)
     return qs.order_by("scheduled_start")
@@ -208,14 +215,18 @@ def start_visit(user, visit_id, gps: dict | None) -> Visit:
         raise NcError("auth.forbidden", "No tienes permiso para registrar visitas.", status=403)
     visit = visit_for(user, visit_id)
     _open(visit)
+    started = False
     if visit.status == VisitStatus.PROGRAMADA:
         visit.status = VisitStatus.EN_CURSO
         visit.started_at = timezone.now()
         visit.updated_by = user
         visit.save(update_fields=["status", "started_at", "updated_by", "updated_at"])
+        started = True
     if gps:
         verify_gps(visit, gps, GpsKind.START)
     record(user, "visit.transition", visit, after={"status": visit.status})
+    if started:
+        transaction.on_commit(lambda: publish_visit("visit.started", visit))
     return visit
 
 
@@ -332,7 +343,9 @@ def _finish(user, visit: Visit, gps: dict | None, status: str) -> GpsCheck:
 def close_visit(user, visit_id, data: dict) -> tuple[Visit, GpsCheck]:
     if not user.has_perm_code("visits.execute"):
         raise NcError("auth.forbidden", "No tienes permiso para registrar visitas.", status=403)
-    visit = Visit.objects.select_for_update().select_related("client__zone", "site").get(id=visit_for(user, visit_id).id)
+    visit_id = visit_for(user, visit_id).id
+    # Lock only Visit: select_related on nullable client.zone breaks FOR UPDATE on Postgres.
+    visit = Visit.objects.select_for_update().get(id=visit_id)
     _open(visit)
     result = data.get("result")
     if result not in VisitResult.values:
@@ -352,7 +365,8 @@ def close_visit(user, visit_id, data: dict) -> tuple[Visit, GpsCheck]:
 def mark_not_done(user, visit_id, data: dict) -> tuple[Visit, GpsCheck]:
     if not user.has_perm_code("visits.execute"):
         raise NcError("auth.forbidden", "No tienes permiso para registrar visitas.", status=403)
-    visit = Visit.objects.select_for_update().select_related("client__zone", "site").get(id=visit_for(user, visit_id).id)
+    visit_id = visit_for(user, visit_id).id
+    visit = Visit.objects.select_for_update().get(id=visit_id)
     _open(visit)
     reason = (data.get("reason") or "").strip()
     if len(reason) < 3:
@@ -360,6 +374,7 @@ def mark_not_done(user, visit_id, data: dict) -> tuple[Visit, GpsCheck]:
     visit.not_done_reason = reason
     visit.result = None
     check = _finish(user, visit, data.get("gps"), VisitStatus.NO_REALIZADA)
+    transaction.on_commit(lambda: publish_visit("visit.not_done", visit, check))
     return visit, check
 
 

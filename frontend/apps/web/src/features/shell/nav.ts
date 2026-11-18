@@ -42,6 +42,7 @@ const LIDER: NavItem[] = [
 const GERENCIA: NavItem[] = [
   { id: "inicio", label: "Inicio", icon: "home", path: "/consola" },
   { id: "visitas", label: "Visitas en vivo", icon: "pin", path: "/consola/visitas" },
+  { id: "geo", label: "Geolocalización", icon: "crosshair", path: "/consola/geo", countKey: "geo" },
   { id: "tableros", label: "Tableros", icon: "dashboard", path: "/consola/tableros" },
   { id: "forecast", label: "Forecast", icon: "funnel", path: "/consola/forecast" },
   { id: "mapa", label: "Mapa de zonas", icon: "map", path: "/consola/mapa" },
@@ -55,7 +56,6 @@ const ADMIN_BACKLOG: NavItem[] = [
   { id: "erp", label: "Conciliación ERP", icon: "refresh", path: "/consola/erp", feature: "erp" },
   { id: "informes", label: "Informes IA", icon: "dashboard", path: "/consola/informes", feature: "ai_reports" },
   { id: "auditoria", label: "Bitácora", icon: "clock", path: "/consola/auditoria" },
-  { id: "capacitacion", label: "Capacitación", icon: "target", path: "/consola/capacitacion" },
 ]
 
 const ADMIN: NavItem[] = [
@@ -69,7 +69,7 @@ const ADMIN: NavItem[] = [
   ...BACKLOG_NAV,
 ]
 
-export function navFor(role: string): NavItem[] {
+function navItemsForRole(role: string): NavItem[] {
   switch (role) {
     case "RTC":
       return RTC
@@ -83,6 +83,13 @@ export function navFor(role: string): NavItem[] {
     default:
       return LIDER
   }
+}
+
+/** Ítems visibles: sin entradas muertas para flags apagados. */
+export function navFor(role: string, features?: Record<string, boolean>): NavItem[] {
+  const items = navItemsForRole(role)
+  if (!features) return items
+  return items.filter((n) => !n.feature || Boolean(features[n.feature]))
 }
 
 export function homeFor(role: string): string {

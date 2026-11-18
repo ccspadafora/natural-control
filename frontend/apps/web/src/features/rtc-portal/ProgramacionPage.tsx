@@ -4,6 +4,7 @@ import { api } from "@nc/api"
 import type { SessionUser } from "@nc/domain"
 import { Badge, Button, DataTable } from "@nc/ui"
 import { PortalPage } from "./PortalPage"
+import { useToast } from "../shared/useToast"
 import { planDeadline, planWeekRange, visitDayShort } from "./shared/format"
 import {
   PLAN_SLOT,
@@ -12,10 +13,24 @@ import {
   type WeeklyPlanCurrent,
 } from "./shared/weekly-plan"
 
+type Suggestion = {
+  client_id: string
+  client_name: string
+  municipality: string
+  site_id?: string | null
+  reason: string
+  band: "B1" | "B2"
+  suggested_day: string
+  suggested_slot: string
+}
+
 export function ProgramacionPage({ user, onLogout }: { user: SessionUser; onLogout: () => void }) {
   const [current, setCurrent] = useState<WeeklyPlanCurrent | null>(null)
+  const [suggestions, setSuggestions] = useState<Suggestion[]>([])
   const [error, setError] = useState("")
   const [busy, setBusy] = useState(false)
+  const [added, setAdded] = useState<Record<string, boolean>>({})
+  const toast = useToast()
 
   function load() {
     api<WeeklyPlanCurrent>("/api/v1/weekly-plans/current")
@@ -32,7 +47,32 @@ export function ProgramacionPage({ user, onLogout }: { user: SessionUser; onLogo
 
   useEffect(() => {
     load()
+    api<{ results: Suggestion[] }>("/api/v1/visits/suggestions")
+      .then((data) => setSuggestions(data.results))
+      .catch(() => setSuggestions([]))
   }, [])
+
+  async function propose(item: Suggestion) {
+    if (!current?.plan?.editable) return
+    setError("")
+    try {
+      await api(`/api/v1/weekly-plans/${current.plan.id}/items`, {
+        method: "POST",
+        body: JSON.stringify({
+          client_id: item.client_id,
+          site_id: item.site_id,
+          planned_date: item.suggested_day,
+          slot: item.suggested_slot,
+          objective: item.reason,
+        }),
+      })
+      setAdded((a) => ({ ...a, [item.client_id]: true }))
+      toast.show(`${item.client_name} quedó en tu programación.`)
+      load()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "No se pudo proponer")
+    }
+  }
 
   async function send() {
     if (!current?.plan) return
@@ -137,6 +177,41 @@ export function ProgramacionPage({ user, onLogout }: { user: SessionUser; onLogo
         ]}
       />
 
+      <section className="nc-portal-stack">
+        <div className="nc-portal-card-head">
+          <h2 className="nc-mgmt-section-title">Sugeridos para tu semana</h2>
+          <span className="nc-portal-muted">Según potencial abierto y días sin visita</span>
+        </div>
+        {suggestions.length === 0 ? (
+          <p className="nc-portal-muted">No hay sugerencias por ahora.</p>
+        ) : (
+          <div className="nc-plan-suggest-cards">
+            {suggestions.map((item) => (
+              <article key={item.client_id} className="nc-plan-suggest-card">
+                <span className="nc-portal-actions">
+                  <Badge tone={item.band === "B1" ? "primary" : "neutral"}>{item.band}</Badge>
+                  <span className="nc-portal-muted">
+                    {visitDayShort(item.suggested_day)} · {PLAN_SLOT[item.suggested_slot] || item.suggested_slot}
+                  </span>
+                </span>
+                <span className="nc-portal-task-title">{item.client_name}</span>
+                <span className="nc-portal-muted">{item.municipality}</span>
+                <span className="nc-portal-muted">{item.reason}</span>
+                <Button
+                  type="button"
+                  variant={added[item.client_id] ? "quiet" : "secondary"}
+                  icon={added[item.client_id] ? "check" : "plus"}
+                  disabled={Boolean(added[item.client_id]) || (plan ? !plan.editable : false)}
+                  onClick={() => propose(item)}
+                >
+                  {added[item.client_id] ? "Propuesta" : "Proponer visita"}
+                </Button>
+              </article>
+            ))}
+          </div>
+        )}
+      </section>
+
       {plan?.editable ? (
         <span className="nc-portal-actions nc-portal-actions-end">
           <Link className="nc-btn nc-btn-secondary" to="/portal/programacion/nueva">
@@ -149,6 +224,7 @@ export function ProgramacionPage({ user, onLogout }: { user: SessionUser; onLogo
       ) : plan ? (
         <p className="nc-portal-muted">{PLAN_STATUS[plan.status] || plan.status}</p>
       ) : null}
+      {toast.node}
     </PortalPage>
   )
 }

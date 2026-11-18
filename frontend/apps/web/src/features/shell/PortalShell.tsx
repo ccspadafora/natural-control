@@ -1,8 +1,9 @@
-import { ReactNode, useMemo, useState } from "react"
+import { ReactNode, useEffect, useMemo, useState } from "react"
 import { NavLink, useNavigate } from "react-router-dom"
 import type { SessionUser } from "@nc/domain"
 import { Button, Icon, applyTheme, readTheme, type NcTheme } from "@nc/ui"
-import { isDemoMode } from "@nc/api"
+import { isDemoMode, openStream } from "@nc/api"
+import { portalDayLabel } from "../rtc-portal/shared/format"
 import { navFor } from "./nav"
 
 type Props = {
@@ -23,15 +24,34 @@ function initials(user: SessionUser) {
 export function PortalShell({
   user,
   geoPending = 0,
-  live = true,
-  dateLabel = "Jue. 29 oct. 2026",
+  live: liveProp,
+  dateLabel,
   onLogout,
   children,
 }: Props) {
   const navigate = useNavigate()
-  const items = useMemo(() => navFor(user.role), [user.role])
+  const items = useMemo(() => navFor(user.role, user.features), [user.role, user.features])
   const [theme, setTheme] = useState<NcTheme>(() => readTheme())
   const [q, setQ] = useState("")
+  const [streamLive, setStreamLive] = useState(false)
+  const live = liveProp ?? streamLive
+
+  useEffect(() => {
+    if (liveProp != null) return
+    const close = openStream(
+      (message) => {
+        if (message.type === "ready") setStreamLive(true)
+      },
+      {
+        onOpen: () => setStreamLive(true),
+        onClose: () => setStreamLive(false),
+      },
+    )
+    return () => {
+      close()
+      setStreamLive(false)
+    }
+  }, [liveProp])
 
   function cycleTheme() {
     const order: NcTheme[] = ["dark", "light", "sol"]
@@ -59,9 +79,6 @@ export function PortalShell({
               >
                 <Icon name={n.icon as never} />
                 <span className="nc-nav-label">{n.label}</span>
-                {n.feature && !user.features[n.feature] ? (
-                  <span className="nc-nav-soon">Próximamente</span>
-                ) : null}
                 {count > 0 ? <span className="nc-nav-count">{count}</span> : null}
               </NavLink>
             )
@@ -107,7 +124,7 @@ export function PortalShell({
             <span className={live ? "nc-live-dot is-on" : "nc-live-dot"} />
             {live ? "En vivo" : "Sin señal"}
           </span>
-          <span className="nc-top-date">{dateLabel}</span>
+          <span className="nc-top-date">{dateLabel ?? portalDayLabel()}</span>
         </header>
         <main className="nc-page">{children}</main>
       </div>

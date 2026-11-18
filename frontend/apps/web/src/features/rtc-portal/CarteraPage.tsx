@@ -2,10 +2,12 @@ import { useEffect, useMemo, useState } from "react"
 import { Link, useNavigate, useSearchParams } from "react-router-dom"
 import { api } from "@nc/api"
 import type { SessionUser } from "@nc/domain"
-import { Badge, DataTable, TextField } from "@nc/ui"
+import { Badge, Button, DataTable, Format, TextField, TOAST } from "@nc/ui"
 import { PortalPage } from "./PortalPage"
 import { CLIENT_STATUS, statusTone } from "./shared/clients"
 import { visitAgo } from "./shared/format"
+import { useExport } from "../mgmt/shared/useMetrics"
+import { useToast } from "../shared/useToast"
 
 type ClientRow = {
   id: string
@@ -18,6 +20,9 @@ type ClientRow = {
   last_visit_at: string | null
   owner_name: string
   zone_name?: string
+  client_type?: string
+  segment?: string
+  total_area_ha?: number | string | null
 }
 
 export function CarteraPage({ user, onLogout }: { user: SessionUser; onLogout: () => void }) {
@@ -26,6 +31,18 @@ export function CarteraPage({ user, onLogout }: { user: SessionUser; onLogout: (
   const q = params.get("q") || ""
   const [rows, setRows] = useState<ClientRow[]>([])
   const [error, setError] = useState("")
+  const exporter = useExport()
+  const toast = useToast()
+
+  async function exportXls() {
+    if (!user.permissions.includes("clients.export")) {
+      toast.show("No tienes permiso para exportar la cartera.", "danger")
+      return
+    }
+    toast.show("Generando el archivo…", "neutral")
+    const ok = await exporter.start("CLIENTS_XLSX")
+    toast.show(ok ? TOAST.exportReady : TOAST.genericError, ok ? "success" : "danger")
+  }
 
   useEffect(() => {
     const query = q.trim() ? `?q=${encodeURIComponent(q.trim())}` : ""
@@ -47,12 +64,12 @@ export function CarteraPage({ user, onLogout }: { user: SessionUser; onLogout: (
           <h1>Tu cartera</h1>
         </div>
         <span className="nc-portal-actions">
-          <button type="button" className="nc-btn nc-btn-secondary" disabled>
-            Exportar a Excel
-          </button>
-          <button type="button" className="nc-btn nc-btn-primary" disabled>
+          <Button type="button" variant="secondary" disabled={exporter.busy} onClick={() => void exportXls()}>
+            {exporter.busy ? "Generando…" : "Exportar a Excel"}
+          </Button>
+          <Link className="nc-btn nc-btn-primary" to="/portal/clientes/nuevo">
             Registrar cliente
-          </button>
+          </Link>
         </span>
       </header>
 
@@ -88,7 +105,14 @@ export function CarteraPage({ user, onLogout }: { user: SessionUser; onLogout: (
           {
             key: "tipo",
             header: "Tipo · segmento",
-            render: () => <span className="nc-portal-muted">— · —</span>,
+            render: (c) =>
+              c.client_type || c.segment ? (
+                <span>
+                  {c.client_type || "—"} · {c.segment || "—"}
+                </span>
+              ) : (
+                <span className="nc-portal-muted">— · —</span>
+              ),
           },
           {
             key: "estado",
@@ -98,7 +122,10 @@ export function CarteraPage({ user, onLogout }: { user: SessionUser; onLogout: (
           {
             key: "area",
             header: "Área",
-            render: () => <span style={{ textAlign: "right", display: "block" }}>—</span>,
+            render: (c) => {
+              const ha = c.total_area_ha == null ? null : Number(c.total_area_ha)
+              return <span style={{ textAlign: "right", display: "block" }}>{ha != null && ha > 0 ? Format.hectares(ha) : "—"}</span>
+            },
           },
           {
             key: "last",
@@ -114,6 +141,7 @@ export function CarteraPage({ user, onLogout }: { user: SessionUser; onLogout: (
         </Link>
         .
       </p>
+      {toast.node}
     </PortalPage>
   )
 }

@@ -1,18 +1,11 @@
+import { useEffect, useState } from "react"
 import { Link, useNavigate, useOutletContext } from "react-router-dom"
+import { api } from "@nc/api"
 import type { SessionUser } from "@nc/domain"
 import { applyTheme, Badge, Icon, readTheme, type NcTheme } from "@nc/ui"
+import { useOutbox } from "../../offline"
 import { planNotice, type Current } from "../../programacion"
-import { useEffect, useState } from "react"
-import { api } from "@nc/api"
-
-const ATTRS = [
-  ["VEN", 90],
-  ["CON", 86],
-  ["ACT", 88],
-  ["COB", 90],
-  ["CNF", 95],
-  ["DES", 79],
-] as const
+import { isStandalone } from "./InstalarScreen"
 
 const THEME_LABEL: Record<NcTheme, string> = {
   dark: "Oscuro",
@@ -26,20 +19,49 @@ function nextTheme(current: NcTheme): NcTheme {
   return "dark"
 }
 
+type Scorecard = {
+  player: {
+    gen: number | null
+    tier_name: string
+    form_word: string
+    chg: number
+    attributes_scores: number[] | null
+  }
+  zone_rank: number | null
+  zone_size: number
+  attr_labels: { k: string; n: string }[]
+}
+
 export function YoScreen() {
   const { user, onLogout } = useOutletContext<{ user: SessionUser; onLogout: () => void }>()
   const navigate = useNavigate()
   const [theme, setTheme] = useState<NcTheme>(() => readTheme())
   const [plan, setPlan] = useState<Current | null>(null)
+  const [card, setCard] = useState<Scorecard | null>(null)
+  const { pending } = useOutbox()
 
   useEffect(() => {
     api<Current>("/api/v1/weekly-plans/current").then(setPlan).catch(() => setPlan(null))
+    api<Scorecard>("/api/v1/league/scorecards/me").then(setCard).catch(() => setCard(null))
   }, [])
 
   const planPending = Boolean(planNotice(plan))
   const planSent = plan?.plan && !plan.plan.editable && plan.plan.status !== "DEVUELTA"
   const webauthnOn = Boolean(user.features.webauthn)
   const mfaOn = Boolean(user.features.mfa)
+  const gen = card?.player.gen
+  const attrs =
+    card?.player.attributes_scores?.map((v, i) => [card.attr_labels[i]?.k || `A${i}`, v] as const) ||
+    ([
+      ["VEN", "—"],
+      ["CON", "—"],
+      ["ACT", "—"],
+      ["COB", "—"],
+      ["CNF", "—"],
+      ["DES", "—"],
+    ] as const)
+  const chg = card?.player.chg || 0
+  const chgLabel = chg > 0 ? `Subiste ${chg}` : chg < 0 ? `Bajaste ${Math.abs(chg)}` : "Sin cambio"
 
   return (
     <>
@@ -54,16 +76,31 @@ export function YoScreen() {
         <div className="nc-campo-player">
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
             <div style={{ display: "grid" }}>
-              <span style={{ font: "800 52px/52px var(--font-sans)", fontVariantNumeric: "tabular-nums" }}>88</span>
+              <span style={{ font: "800 52px/52px var(--font-sans)", fontVariantNumeric: "tabular-nums" }}>
+                {gen == null ? "—" : gen}
+              </span>
               <span className="nc-campo-eyebrow" style={{ textTransform: "uppercase", color: "var(--ink-secondary)" }}>
-                Nivel Oro
+                {card?.player.tier_name || "Carta"}
               </span>
             </div>
             <div style={{ display: "grid", justifyItems: "end", gap: 2 }}>
-              <span style={{ font: "var(--text-label)" }}>Puesto 2 de 5</span>
-              <span style={{ display: "inline-flex", alignItems: "center", gap: 4, font: "var(--text-caption)", color: "var(--success)" }}>
-                <Icon name="arrowUp" small />
-                Subiste 1 puesto
+              <span style={{ font: "var(--text-label)" }}>
+                {card?.zone_rank != null
+                  ? `Puesto ${card.zone_rank}${card.zone_size ? ` de ${card.zone_size}` : ""}`
+                  : "Liga de zona"}
+              </span>
+              <span
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: 4,
+                  font: "var(--text-caption)",
+                  color: chg > 0 ? "var(--success)" : chg < 0 ? "var(--danger)" : "var(--ink-secondary)",
+                }}
+              >
+                {chg > 0 ? <Icon name="arrowUp" small /> : null}
+                {chg < 0 ? <Icon name="arrowDown" small /> : null}
+                {chgLabel}
               </span>
             </div>
           </div>
@@ -71,7 +108,7 @@ export function YoScreen() {
             className="nc-campo-stat-grid"
             style={{ borderTop: "1px solid var(--hairline)", paddingTop: "var(--space-3)" }}
           >
-            {ATTRS.map(([k, v]) => (
+            {attrs.map(([k, v]) => (
               <div key={k} style={{ display: "flex", gap: 6, alignItems: "baseline" }}>
                 <span style={{ font: "800 20px/24px var(--font-sans)", fontVariantNumeric: "tabular-nums" }}>{v}</span>
                 <span style={{ font: "var(--text-label)", color: "var(--ink-secondary)" }}>{k}</span>
@@ -79,7 +116,7 @@ export function YoScreen() {
             ))}
           </div>
           <span style={{ font: "var(--text-caption)", color: "var(--ink-secondary)" }}>
-            Carta de jugador en construcción. Los atributos son referencia del prototipo.
+            {card ? `Forma: ${card.player.form_word}` : "Sincroniza para ver tu carta de liga."}
           </span>
         </div>
 
@@ -93,7 +130,9 @@ export function YoScreen() {
           <button type="button" onClick={() => navigate("/sincronizacion")}>
             <Icon name="refresh" />
             <span style={{ flex: 1 }}>Sincronización</span>
-            <span style={{ font: "var(--text-caption)", color: "var(--ink-secondary)" }}>0 pendientes</span>
+            <span style={{ font: "var(--text-caption)", color: "var(--ink-secondary)" }}>
+              {pending} {pending === 1 ? "pendiente" : "pendientes"}
+            </span>
           </button>
           <button type="button" disabled={!webauthnOn}>
             <Icon name="target" />
@@ -112,6 +151,13 @@ export function YoScreen() {
             ) : (
               <Badge tone="neutral">Próximamente</Badge>
             )}
+          </button>
+          <button type="button" onClick={() => navigate("/instalar")}>
+            <Icon name="plus" />
+            <span style={{ flex: 1 }}>Instalar la app</span>
+            <span style={{ font: "var(--text-caption)", color: "var(--ink-secondary)" }}>
+              {isStandalone() ? "Instalada" : "Acceso directo"}
+            </span>
           </button>
           <button
             type="button"

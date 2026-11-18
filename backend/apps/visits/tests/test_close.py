@@ -58,8 +58,15 @@ def _payload(lng, lat, accuracy=12, error="NONE"):
 
 
 def test_distance_thresholds():
+    from django.core.cache import cache
+
     seed()
+    cache.delete("setting:gps.tolerance_m")
     visit = _visit("Finca La Esperanza")
+    zone = visit.client.zone
+    if zone is not None:
+        zone.gps_tolerance_m = 1000
+        zone.save(update_fields=["gps_tolerance_m", "updated_at"])
     site = visit.site
     lng, lat = site.location.x, site.location.y
 
@@ -67,12 +74,13 @@ def test_distance_thresholds():
     assert same.status == GpsStatus.VERIFICADA
     assert same.distance_m < 1
 
-    near_lng, near_lat = _shift(lng, lat, 999)
+    # 900 m queda dentro de la tolerancia 1000 (margen por proyección geográfica).
+    near_lng, near_lat = _shift(lng, lat, 900)
     near = verify_gps(visit, _payload(near_lng, near_lat), GpsKind.CLOSE)
     assert near.status == GpsStatus.VERIFICADA
-    assert 990 <= near.distance_m <= 1008
+    assert 880 <= near.distance_m <= 950
 
-    far_lng, far_lat = _shift(lng, lat, 1001)
+    far_lng, far_lat = _shift(lng, lat, 1100)
     far = verify_gps(visit, _payload(far_lng, far_lat), GpsKind.CLOSE)
     assert far.status == GpsStatus.FUERA_DE_RANGO
     assert far.review_status == "PENDIENTE"

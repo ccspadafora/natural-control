@@ -33,12 +33,6 @@ function cardStatus(row: VisitRow): VisitStatus {
   return row.status as VisitStatus
 }
 
-const TASKS = [
-  { id: "1", title: "Confirmar pedido con Agrícola San José", client: "Marinilla", late: false },
-  { id: "2", title: "Enviar cotización a Flores del Oriente", client: "El Carmen de Viboral", late: true },
-  { id: "3", title: "Revisar muestra en Hortalizas El Retiro", client: "El Retiro", late: false },
-]
-
 export function MisNumerosPage({ user, onLogout }: { user: SessionUser; onLogout: () => void }) {
   const [today, setToday] = useState<VisitRow[]>([])
   const [weekDone, setWeekDone] = useState(0)
@@ -77,17 +71,42 @@ export function MisNumerosPage({ user, onLogout }: { user: SessionUser; onLogout
     [today],
   )
 
+  const tasks = useMemo(
+    () =>
+      today
+        .filter((v) => v.status === "PROGRAMADA" || v.status === "EN_CURSO" || v.late)
+        .slice(0, 6)
+        .map((v) => ({
+          id: v.id,
+          title: v.reason ? `${v.reason} · ${v.client_name}` : `Visita · ${v.client_name}`,
+          client: v.municipality,
+          late: v.late,
+          clientId: v.client_id,
+        })),
+    [today],
+  )
+
+  const [kpi, setKpi] = useState<{ sales: number; budget: number; expected: number; falta: number; gen: number | null; rank_zone: number | null; zone_size?: number } | null>(null)
+
+  useEffect(() => {
+    api<{ sales: number; budget: number; expected: number; falta: number; gen: number | null; rank_zone: number | null; zone_size?: number }>(
+      "/api/v1/metrics/my-numbers",
+    )
+      .then(setKpi)
+      .catch(() => setKpi(null))
+  }, [])
+
   const banner = planBannerLine(plan)
   const now = new Date()
   const day = now.getDate()
   const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate()
-  const sales = 31_200_000
-  const budget = 34_000_000
-  const expected = budget * (day / daysInMonth)
+  const sales = kpi?.sales ?? 0
+  const budget = kpi?.budget ?? 0
+  const expected = kpi?.expected ?? budget * (day / daysInMonth)
   const weekTarget = Math.max(weekTotal, 15)
   const weekExpected = Math.round(weekTarget * (day / 7))
   const dailyNeed = Format.money(Math.max(0, (budget - sales) / Math.max(1, daysInMonth - day + 1)))
-  const lateTasks = TASKS.filter((t) => t.late).length
+  const lateTasks = tasks.filter((t) => t.late).length
 
   return (
     <PortalPage user={user} onLogout={onLogout}>
@@ -127,25 +146,33 @@ export function MisNumerosPage({ user, onLogout }: { user: SessionUser; onLogout
       <div className="nc-portal-split">
         <section className="nc-portal-card">
           <div className="nc-portal-card-head">
-            <h2>Tareas de hoy</h2>
+            <h2>Agenda de hoy</h2>
             <span className="nc-portal-muted">
-              {TASKS.length} tareas · {lateTasks} atrasada{lateTasks === 1 ? "" : "s"}
+              {tasks.length} visita{tasks.length === 1 ? "" : "s"} · {lateTasks} atrasada{lateTasks === 1 ? "" : "s"}
             </span>
           </div>
-          <ul className="nc-portal-task-list">
-            {TASKS.map((task) => (
-              <li key={task.id} className="nc-portal-task">
-                <div>
-                  <span className="nc-portal-task-title">{task.title}</span>
-                  <span className="nc-portal-muted">{task.client}</span>
-                </div>
-                {task.late ? <Badge tone="warning">Atrasada</Badge> : null}
-                <Button variant="outline" icon="check" type="button" disabled>
-                  Marcar hecha
-                </Button>
-              </li>
-            ))}
-          </ul>
+          {tasks.length === 0 ? (
+            <p className="nc-portal-muted">No tienes visitas abiertas para hoy.</p>
+          ) : (
+            <ul className="nc-portal-task-list">
+              {tasks.map((task) => (
+                <li key={task.id} className="nc-portal-task">
+                  <div>
+                    <span className="nc-portal-task-title">{task.title}</span>
+                    <span className="nc-portal-muted">{task.client}</span>
+                  </div>
+                  {task.late ? <Badge tone="warning">Atrasada</Badge> : null}
+                  <Button
+                    variant="outline"
+                    type="button"
+                    onClick={() => window.location.assign(`/portal/clientes/${task.clientId}`)}
+                  >
+                    Abrir
+                  </Button>
+                </li>
+              ))}
+            </ul>
+          )}
         </section>
 
         <div className="nc-portal-stack nc-portal-stack-tight">
@@ -172,10 +199,14 @@ export function MisNumerosPage({ user, onLogout }: { user: SessionUser; onLogout
           )}
 
           <div className="nc-portal-mini-card">
-            <span className="nc-portal-gen">82</span>
+            <span className="nc-portal-gen">{kpi?.gen ?? "—"}</span>
             <div className="nc-portal-mini-body">
-              <span className="nc-portal-task-title">Nivel Oro · puesto 3 de 12</span>
-              <span className="nc-portal-muted">Liga {user.zone_id ? "de tu zona" : "Oriente antioqueño"} · En racha</span>
+              <span className="nc-portal-task-title">
+                {kpi?.rank_zone
+                  ? `GEN ${kpi.gen ?? "—"} · puesto ${kpi.rank_zone}${kpi.zone_size ? ` de ${kpi.zone_size}` : ""}`
+                  : "Tu carta de liga"}
+              </span>
+              <span className="nc-portal-muted">Liga {user.zone_id ? "de tu zona" : "Oriente antioqueño"}</span>
             </div>
             <Link className="nc-text-link" to="/portal/micarta">
               Ver carta

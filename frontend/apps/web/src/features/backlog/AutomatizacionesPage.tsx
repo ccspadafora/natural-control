@@ -7,11 +7,10 @@ export function AutomatizacionesPage({ user, onLogout }: { user: SessionUser; on
       user={user}
       onLogout={onLogout}
       title="Automatizaciones"
-      lede="Reglas posteriores a la visita — stub hasta configurar acciones."
-      feature="automation"
+      lede="Reglas posteriores a la visita."
       fetchPath="/api/v1/automation/rules"
       emptyTitle="Sin reglas configuradas"
-      emptyBody="Define reglas post-visita cuando la automatización esté activa en este entorno."
+      emptyBody="Las reglas post-visita que configures se listarán aquí."
     />
   )
 }

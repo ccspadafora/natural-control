@@ -8,11 +8,14 @@ from decimal import Decimal
 from django.contrib.auth import get_user_model
 from django.contrib.gis.geos import Point
 
-from apps.accounts.models import Role
+from apps.accounts.models import Device, Platform, Role
+from apps.integrations.models import ErpEntity, ErpSyncRun, SyncStatus
 from apps.catalog.models import Category, Price, PriceList, Product, Unit
 from apps.core.prototipo.data import (
+    FORECAST_MONTH_SHARES,
     FROZEN_AT,
     MUNICIPALITIES,
+    PROTO_BADGES,
     PROTO_CLIENTS,
     PROTO_PRODUCTS,
     PROTO_RTCS,
@@ -36,7 +39,7 @@ from apps.crm.models import (
     Site,
 )
 from apps.geo.models import Department, Municipality
-from apps.goals.models import Goal, PeriodType
+from apps.goals.models import Badge, Goal, PeriodType, ScorecardSnapshot
 from apps.org.models import Zone
 from apps.parameters.models import SystemSetting, ValueType
 from apps.visits.models import (
@@ -44,9 +47,13 @@ from apps.visits.models import (
     GpsError,
     GpsKind,
     GpsStatus,
+    Horizon,
+    ProductKind,
+    PotentialStatus,
     ReviewStatus,
     Visit,
     VisitOrigin,
+    VisitProduct,
     VisitReason,
     VisitResult,
     VisitStatus,
@@ -381,10 +388,210 @@ def _ensure_visits(users: dict[str, object], clients: dict[str, Client]) -> dict
     return visits
 
 
+def _horizon_for_result(result: str | None) -> str:
+    if result in ("PEDIDO_CONFIRMADO", "COTIZACION_SOLICITADA"):
+        return Horizon.CORTO
+    if result == "SEGUIMIENTO_PROGRAMADO":
+        return Horizon.MEDIANO
+    return Horizon.LARGO
+
+
+def _product_unit_price(product: Product, fallback: Decimal) -> Decimal:
+    priced = product.prices.filter(is_deleted=False).values_list("unit_price", flat=True).first()
+    if priced is not None and priced > 0:
+        return Decimal(str(priced))
+    return fallback if fallback > 0 else Decimal("1")
+
+
+def _upsert_line(
+    visit: Visit,
+    product: Product,
+    kind: str,
+    total: Decimal,
+    *,
+    horizon: str | None = None,
+    expected: date | None = None,
+    probability: int | None = None,
+) -> None:
+    if total <= 0:
+        return
+    unit_price = _product_unit_price(product, total)
+    quantity = (total / unit_price).quantize(Decimal("0.001"))
+    if quantity <= 0:
+        quantity = Decimal("1")
+        unit_price = total
+    defaults = {
+        "quantity": quantity,
+        "unit": product.unit,
+        "unit_price": unit_price,
+        "total_value": total.quantize(Decimal("0.01")),
+        "horizon": horizon,
+        "expected_date": expected,
+        "probability": probability,
+        "status": PotentialStatus.ABIERTO if kind == ProductKind.POTENCIAL else PotentialStatus.GANADO,
+    }
+    existing = VisitProduct.objects.filter(visit=visit, product=product, kind=kind, is_deleted=False)
+    if horizon:
+        existing = existing.filter(horizon=horizon, expected_date=expected)
+    row = existing.first()
+    if row:
+        for key, value in defaults.items():
+            setattr(row, key, value)
+        row.save()
+        return
+    VisitProduct.objects.create(visit=visit, product=product, kind=kind, **defaults)
+
+
+def _ensure_visit_products(visits: dict[str, Visit], products: dict[str, Product]) -> None:
+    from django.db.models import Sum
+
+    product_list = list(products.values())
+    if not product_list:
+        return
+    probs = {"CORTO": 70, "MEDIANO": 40, "LARGO": 20}
+    try:
+        from apps.parameters.services import get_setting
+
+        probs = get_setting("forecast.default_probability") or probs
+    except Exception:
+        pass
+
+    for row in PROTO_VISITS:
+        visit = visits.get(row["id"])
+        if visit is None or visit.status != VisitStatus.REALIZADA:
+            continue
+        product = product_list[abs(hash(row["id"])) % len(product_list)]
+        conc = Decimal(str(int(row.get("conc") or 0)))
+        pot = Decimal(str(int(row.get("pot") or 0)))
+        horizon = _horizon_for_result(row.get("res"))
+        expected = FROZEN_AT.date() + timedelta(
+            days=7 if horizon == Horizon.CORTO else 21 if horizon == Horizon.MEDIANO else 60
+        )
+        if conc > 0:
+            _upsert_line(visit, product, ProductKind.CONCRETADO, conc, probability=100)
+        if pot > 0:
+            _upsert_line(
+                visit,
+                product,
+                ProductKind.POTENCIAL,
+                pot,
+                horizon=horizon,
+                expected=expected,
+                probability=int(probs.get(horizon, 20)),
+            )
+
+    # Completa el potencial de cartera por RTC hasta pot del prototipo (nov–feb).
+    fill_dates = [row[0] for row in FORECAST_MONTH_SHARES]
+    for rtc_row in PROTO_RTCS:
+        target = Decimal(str(int(rtc_row["pot"])))
+        rtc_visits = [visits[v["id"]] for v in PROTO_VISITS if v["rtc"] == rtc_row["id"] and v["id"] in visits]
+        if not rtc_visits:
+            # RTC sin visitas del día: colgar el potencial en una visita portadora si tiene cliente.
+            from django.contrib.auth import get_user_model
+
+            rtc_user = get_user_model().objects.filter(email=rtc_row["email"]).first()
+            if rtc_user is None:
+                continue
+            client = Client.objects.filter(owner=rtc_user, is_deleted=False).first()
+            if client is None:
+                continue
+            site = client.sites.filter(is_deleted=False).first()
+            if site is None:
+                continue
+            carrier, _ = Visit.objects.get_or_create(
+                rtc=rtc_user,
+                client=client,
+                scheduled_start=FROZEN_AT - timedelta(days=14),
+                defaults={
+                    "site": site,
+                    "origin": VisitOrigin.RTC,
+                    "status": VisitStatus.REALIZADA,
+                    "started_at": FROZEN_AT - timedelta(days=14),
+                    "completed_at": FROZEN_AT - timedelta(days=14) + timedelta(hours=1),
+                    "result": VisitResult.SEGUIMIENTO_PROGRAMADO,
+                    "notes": "Visita portadora del potencial de cartera (prototipo).",
+                },
+            )
+            rtc_visits = [carrier]
+        rtc_id = rtc_visits[0].rtc_id
+        # Quitar fills anteriores para recalcular de forma idempotente.
+        VisitProduct.objects.filter(
+            visit__rtc_id=rtc_id,
+            kind=ProductKind.POTENCIAL,
+            expected_date__in=fill_dates,
+            is_deleted=False,
+        ).delete()
+        existing = (
+            VisitProduct.objects.filter(
+                visit__rtc_id=rtc_id,
+                kind=ProductKind.POTENCIAL,
+                status=PotentialStatus.ABIERTO,
+                is_deleted=False,
+            ).aggregate(total=Sum("total_value"))["total"]
+            or Decimal("0")
+        )
+        gap = target - Decimal(str(existing))
+        if gap <= 0:
+            continue
+        # Las proporciones del prototipo son alturas de gráfico (suman ~1.8); normalizar a 1.0.
+        raw_shares = [
+            (expected, horizon, share)
+            for expected, corto, mediano, largo in FORECAST_MONTH_SHARES
+            for horizon, share in (
+                (Horizon.CORTO, corto),
+                (Horizon.MEDIANO, mediano),
+                (Horizon.LARGO, largo),
+            )
+            if share > 0
+        ]
+        share_total = sum(s for _, _, s in raw_shares) or 1.0
+        anchor = next((v for v in rtc_visits if v.status == VisitStatus.REALIZADA), rtc_visits[0])
+        product = product_list[abs(hash(rtc_row["id"])) % len(product_list)]
+        allocated = Decimal("0")
+        for idx, (expected, horizon, share) in enumerate(raw_shares):
+            if idx == len(raw_shares) - 1:
+                amount = (gap - allocated).quantize(Decimal("0.01"))
+            else:
+                amount = (gap * Decimal(str(share / share_total))).quantize(Decimal("0.01"))
+                allocated += amount
+            if amount <= 0:
+                continue
+            _upsert_line(
+                anchor,
+                product,
+                ProductKind.POTENCIAL,
+                amount,
+                horizon=horizon,
+                expected=expected,
+                probability=int(probs.get(horizon, 20)),
+            )
+
+
 def _ensure_goals(users: dict[str, object]) -> None:
     period_start = date(2026, 10, 1)
+    now = FROZEN_AT
+    zone_sizes = {}
+    for row in PROTO_RTCS:
+        zone_sizes[row["z"]] = zone_sizes.get(row["z"], 0) + 1
+    ranked_nat = sorted(
+        [r for r in PROTO_RTCS if r.get("gen") is not None],
+        key=lambda r: r["gen"],
+        reverse=True,
+    )
+    rank_nat = {row["id"]: idx + 1 for idx, row in enumerate(ranked_nat)}
+    rank_zone: dict[str, int] = {}
+    by_z: dict[str, list] = {}
+    for row in PROTO_RTCS:
+        by_z.setdefault(row["z"], []).append(row)
+    for group in by_z.values():
+        ordered = sorted([r for r in group if r.get("gen") is not None], key=lambda r: r["gen"], reverse=True)
+        for idx, row in enumerate(ordered, start=1):
+            rank_zone[row["id"]] = idx
     for row in PROTO_RTCS:
         user = users[row["id"]]
+        sync_min = int(row.get("sync_min") or 0)
+        user.last_sync_at = FROZEN_AT - timedelta(minutes=sync_min)
+        user.save(update_fields=["last_sync_at", "updated_at"])
         Goal.objects.update_or_create(
             user=user,
             period_type=PeriodType.MES,
@@ -394,6 +601,111 @@ def _ensure_goals(users: dict[str, object]) -> None:
                 "visits_target": row["vt"],
                 "new_clients_target": 4,
             },
+        )
+        attrs = {
+            "sales": int(row["sales"]),
+            "visits": row["visits"],
+            "deals": max(1, int(row["visits"] * 0.28)),
+            "zone_size": zone_sizes.get(row["z"], 12),
+            "verif": row.get("verif"),
+            "disc": row.get("disc"),
+            "nuevos": row.get("nuevos"),
+            "pot": int(row["pot"]),
+            "conc": int(row["conc"]),
+            "cob": row.get("cob"),
+            "eff": row.get("eff"),
+            "stale": row.get("stale"),
+            "attributes_scores": row.get("a"),
+            "form": row.get("form") or "flat",
+            "chg": int(row.get("chg") or 0),
+            "erp": row.get("erp") or "",
+            "zone_code": row["z"],
+        }
+        ScorecardSnapshot.objects.update_or_create(
+            user=user,
+            period_start=period_start,
+            defaults={
+                "gen": row.get("gen"),
+                "attributes": attrs,
+                "rank_zone": rank_zone.get(row["id"]),
+                "rank_national": rank_nat.get(row["id"]),
+                "computed_at": now,
+            },
+        )
+
+    for code, title, rtc_id, reason in PROTO_BADGES:
+        rtc_user = users.get(rtc_id)
+        if rtc_user is None:
+            continue
+        Badge.objects.update_or_create(
+            code=code,
+            period_start=period_start,
+            defaults={
+                "title": title,
+                "user": rtc_user,
+                "reason": reason,
+            },
+        )
+
+
+def _ensure_admin_health(users: dict[str, object]) -> None:
+    """Dispositivos con mutaciones pendientes + corrida ERP demo (HU-17.6)."""
+    specs = [
+        ("so", "Android 13 · Samsung A34", Platform.ANDROID, 3, 60),
+        ("ml", "iPhone 12 · iOS 17.5", Platform.IOS, 1, 18 * 60),
+    ]
+    for rtc_id, label, platform, pending, minutes_ago in specs:
+        user = users.get(rtc_id)
+        if user is None:
+            continue
+        device = (
+            Device.objects.filter(user=user, label=label, is_deleted=False, revoked_at__isnull=True)
+            .order_by("-created_at")
+            .first()
+        )
+        defaults = {
+            "platform": platform,
+            "pending_mutations": pending,
+            "last_used_at": FROZEN_AT - timedelta(minutes=minutes_ago),
+        }
+        if device is None:
+            Device.objects.create(user=user, label=label, **defaults)
+        else:
+            for key, value in defaults.items():
+                setattr(device, key, value)
+            device.save(update_fields=["platform", "pending_mutations", "last_used_at", "updated_at"])
+
+    started = FROZEN_AT.replace(hour=6, minute=0, second=0, microsecond=0)
+    run = ErpSyncRun.objects.filter(entity=ErpEntity.SALES, is_deleted=False).order_by("-started_at").first()
+    if run is None:
+        ErpSyncRun.objects.create(
+            entity=ErpEntity.SALES,
+            started_at=started,
+            finished_at=started + timedelta(minutes=12),
+            status=SyncStatus.OK,
+            records_read=217,
+            records_upserted=214,
+            records_failed=3,
+        )
+    else:
+        run.started_at = started
+        run.finished_at = started + timedelta(minutes=12)
+        run.status = SyncStatus.OK
+        run.records_read = 217
+        run.records_upserted = 214
+        run.records_failed = 3
+        run.error = ""
+        run.save(
+            update_fields=[
+                "started_at",
+                "finished_at",
+                "status",
+                "records_read",
+                "records_upserted",
+                "records_failed",
+                "error",
+                "updated_at",
+            ]
         )
 
 
@@ -426,5 +738,7 @@ def seed_prototipo() -> None:
     users = _ensure_users(zones)
     products = _ensure_catalog(zones)
     clients = _ensure_clients(users, zones, mun_by_name, products)
-    _ensure_visits(users, clients)
+    visits = _ensure_visits(users, clients)
+    _ensure_visit_products(visits, products)
     _ensure_goals(users)
+    _ensure_admin_health(users)

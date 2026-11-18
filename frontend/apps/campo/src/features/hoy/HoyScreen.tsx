@@ -3,7 +3,7 @@ import { Link, useNavigate, useOutletContext } from "react-router-dom"
 import { api } from "@nc/api"
 import type { SessionUser } from "@nc/domain"
 import { Button, ComplianceMeter, Format, Icon, SyncBanner, VisitCard, type VisitStatus } from "@nc/ui"
-import { useOutbox } from "../../offline"
+import { isOfflineMode, listCachedVisitsForDay, useOutbox } from "../../offline"
 import { planNotice, type Current } from "../../programacion"
 import { agendaDayParam, campoDayLabel, userInitials, visitClock } from "../shared/campo-format"
 
@@ -46,16 +46,46 @@ export function HoyScreen() {
   const [loaded, setLoaded] = useState(false)
   const [error, setError] = useState("")
   const [plan, setPlan] = useState<Current | null>(null)
-  const { pending, offline, syncing, syncNow } = useOutbox()
+  const { pending, offline, syncing } = useOutbox()
 
   useEffect(() => {
     const day = agendaDayParam()
+    let alive = true
     setLoaded(false)
-    api<{ results: VisitRow[] }>(`/api/v1/visits/agenda?date=${day}&view=today`)
-      .then((data) => setRows(data.results))
-      .catch((err) => setError(err instanceof Error ? err.message : "No se pudo cargar la agenda"))
-      .finally(() => setLoaded(true))
+
+    async function load() {
+      if (isOfflineMode()) {
+        const cached = (await listCachedVisitsForDay(day)) as VisitRow[]
+        if (!alive) return
+        setRows(cached)
+        setError(cached.length ? "" : "Sin datos locales para hoy. Conéctate para sincronizar.")
+        setLoaded(true)
+        return
+      }
+      try {
+        const data = await api<{ results: VisitRow[] }>(`/api/v1/visits/agenda?date=${day}&view=today`)
+        if (!alive) return
+        setRows(data.results)
+        setError("")
+      } catch (err) {
+        const cached = (await listCachedVisitsForDay(day)) as VisitRow[]
+        if (!alive) return
+        if (cached.length) {
+          setRows(cached)
+          setError("Mostrando agenda en caché (sin conexión con el servidor).")
+        } else {
+          setError(err instanceof Error ? err.message : "No se pudo cargar la agenda")
+        }
+      } finally {
+        if (alive) setLoaded(true)
+      }
+    }
+
+    void load()
     api<Current>("/api/v1/weekly-plans/current").then(setPlan).catch(() => setPlan(null))
+    return () => {
+      alive = false
+    }
   }, [])
 
   const done = useMemo(() => rows.filter((v) => DONE.has(v.status)).length, [rows])
@@ -63,13 +93,27 @@ export function HoyScreen() {
   const planPending = Boolean(user.requires_weekly_plan) || Boolean(planNotice(plan))
   const notice = planNotice(plan)
 
-  const month = new Intl.DateTimeFormat("es-CO", { month: "long", timeZone: "America/Bogota" }).format(new Date())
-  const sales = 31_200_000
-  const budget = 34_000_000
-  const day = new Date().getDate()
-  const daysInMonth = new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0).getDate()
-  const expected = budget * (day / daysInMonth)
-  const falta = budget - sales
+  const [kpi, setKpi] = useState<{ sales: number; budget: number; expected: number; falta: number } | null>(null)
+  useEffect(() => {
+    api<{ sales: number; budget: number; expected: number; falta: number }>("/api/v1/metrics/my-numbers")
+      .then((data) =>
+        setKpi({
+          sales: data.sales,
+          budget: data.budget,
+          expected: data.expected,
+          falta: data.falta,
+        }),
+      )
+      .catch(() => setKpi(null))
+  }, [])
+
+  const monthRaw = new Intl.DateTimeFormat("es-CO", { month: "long", timeZone: "America/Bogota" }).format(new Date())
+  const month = monthRaw.charAt(0).toUpperCase() + monthRaw.slice(1)
+  const sales = kpi?.sales ?? 0
+  const budget = kpi?.budget ?? 0
+  const expected = kpi?.expected ?? 0
+  const falta = kpi?.falta ?? 0
+  const showSync = offline || syncing || pending > 0
 
   return (
     <>
@@ -87,22 +131,15 @@ export function HoyScreen() {
         </div>
       </header>
 
-      <section className="nc-campo-page">
-        {offline || syncing ? (
-          <SyncBanner
-            state={syncing ? "syncing" : "offline"}
-            pending={pending}
-            onRetry={() => navigate("/sincronizacion")}
-          />
-        ) : null}
-        {!offline && pending > 0 && !syncing ? (
-          <p className="nc-kicker" style={{ marginTop: "var(--space-2)" }}>
-            <button type="button" className="nc-campo-link-row" onClick={() => void syncNow()}>
-              Sincronizar ahora
-            </button>
-          </p>
-        ) : null}
+      {showSync ? (
+        <SyncBanner
+          state={syncing ? "syncing" : offline ? "offline" : "error"}
+          pending={pending}
+          onRetry={() => navigate("/sincronizacion")}
+        />
+      ) : null}
 
+      <section className="nc-campo-page">
         <ComplianceMeter
           label={`Ventas de ${month}`}
           value={sales}
@@ -129,7 +166,16 @@ export function HoyScreen() {
 
         {error ? <p className="nc-note">{error}</p> : null}
         {!loaded ? <p className="nc-kicker">Cargando…</p> : null}
-        {loaded && rows.length === 0 ? <p className="nc-kicker">No tienes visitas agendadas para hoy.</p> : null}
+        {loaded && rows.length === 0 ? (
+          <div className="nc-campo-empty">
+            <p className="nc-campo-section-title" style={{ margin: 0 }}>
+              Sin visitas hoy
+            </p>
+            <p className="nc-campo-section-meta" style={{ margin: 0 }}>
+              Agenda desde un cliente o registra una visita sin agendar.
+            </p>
+          </div>
+        ) : null}
         {rows.map((visit) => (
           <VisitCard
             key={visit.id}

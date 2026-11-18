@@ -115,6 +115,10 @@ CELERY_BEAT_SCHEDULE = {
         "task": "apps.visits.tasks.close_weekly_plans",
         "schedule": 3600,
     },
+    "goals-refresh-scorecards": {
+        "task": "goals.refresh_scorecards",
+        "schedule": 86400,  # diario; docs: 0 4 * * *
+    },
 }
 
 CHANNEL_LAYERS = {

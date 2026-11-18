@@ -1,40 +1,68 @@
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
 .nc-campo {
-  min-height: 100vh;
+  height: 100dvh;
+  max-height: 100dvh;
+  width: min(480px, 100%);
+  margin: 0 auto;
   display: flex;
   flex-direction: column;
+  overflow: hidden;
   background: var(--canvas);
   color: var(--ink);
   font-family: var(--font-sans);
-}
-
-.nc-campo-body {
-  flex: 1;
-  padding: var(--space-4);
-  padding-bottom: calc(72px + var(--space-4));
   box-sizing: border-box;
 }
 
+.nc-campo-chrome {
+  flex-shrink: 0;
+  background: var(--surface);
+  border-bottom: 1px solid var(--hairline);
+  padding-top: env(safe-area-inset-top);
+}
+
+.nc-campo-main {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  padding: var(--space-4);
+  box-sizing: border-box;
+}
+
+.nc-campo-main--flush {
+  padding: 0;
+}
+
 .nc-campo-tabs {
-  position: fixed;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  height: 64px;
+  flex-shrink: 0;
   display: grid;
   grid-template-columns: repeat(4, 1fr);
+  gap: 0;
   background: var(--surface);
   border-top: 1px solid var(--hairline);
+  padding: 6px 8px calc(6px + env(safe-area-inset-bottom));
   z-index: 20;
 }
 
 .nc-campo-tab {
-  display: grid;
-  place-items: center;
-  gap: 2px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
   text-decoration: none;
   color: var(--ink-tertiary);
-  font: 700 11px/1.2 var(--font-sans);
-  padding: 8px 4px;
+  font: 700 12px/1.2 var(--font-sans);
+  min-height: 44px;
+  padding: 4px 2px;
+  -webkit-tap-highlight-color: transparent;
 }
 
 .nc-campo-tab.is-active {
@@ -45,14 +73,58 @@
   position: relative;
   display: grid;
   place-items: center;
+  width: 56px;
+  height: 28px;
+  border-radius: 999px;
+}
+
+.nc-campo-tab.is-active .nc-campo-tab-icon {
+  background: var(--primary-tint);
 }
 
 .nc-campo-dot {
   position: absolute;
-  top: -2px;
-  right: -4px;
+  top: 2px;
+  right: 8px;
   width: 8px;
   height: 8px;
   border-radius: 50%;
   background: var(--danger-solid);
+}
+
+.nc-campo-install-nudge {
+  flex-shrink: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  padding: calc(8px + env(safe-area-inset-top)) 12px 8px;
+  background: var(--primary);
+  color: #fff;
+  font: 600 13px/1.3 var(--font-sans);
+}
+
+.nc-campo-install-nudge a,
+.nc-campo-install-nudge button {
+  color: #fff;
+  font: 700 13px/1 var(--font-sans);
+  background: transparent;
+  border: 0;
+  text-decoration: underline;
+  cursor: pointer;
+  padding: 0;
+  min-height: 44px;
+}
+
+.nc-campo-install-nudge span {
+  flex: 1 1 160px;
+}
+
+@media (min-width: 520px) {
+  body:has(.nc-campo) {
+    background: #d9e0ea;
+  }
+  .nc-campo {
+    box-shadow: var(--shadow-float);
+  }
 }

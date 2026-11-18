@@ -1,7 +1,14 @@
 import { FormEvent, useEffect, useMemo, useState } from "react"
 import { Link, useNavigate, useParams } from "react-router-dom"
 import { api } from "@nc/api"
-import { enqueueMutation, isOfflineMode } from "../../offline"
+import {
+  enqueueMutation,
+  enqueueVisitPhoto,
+  getCachedClient,
+  getCachedVisit,
+  isOfflineMode,
+  listCachedProducts,
+} from "../../offline"
 import {
   Badge,
   Button,
@@ -14,6 +21,8 @@ import {
   type TabItem,
 } from "@nc/ui"
 import { mapsDirectionsUrl, visitAgo } from "../shared/campo-format"
+import { haptic } from "../shared/haptics"
+import { showToast } from "../shared/toast"
 
 type Line = { product_id: string; kind: string; quantity: string; unit_price: string; horizon: string; month?: string }
 type Product = { id: string; name: string; presentation: string; unit_price: string | null }
@@ -24,6 +33,7 @@ type ClientDetail = {
   phone: string
   last_visit_at: string | null
   sites?: Site[]
+  crops?: { name: string; area_ha: number }[]
 }
 type Visit = {
   id: string
@@ -33,6 +43,7 @@ type Visit = {
   status: string
   result: string | null
   notes: string
+  started_at?: string | null
   gps_check: {
     status: GpsStatus
     distance_m: number | null
@@ -129,18 +140,40 @@ export function VisitaScreen() {
       setHorizon(draft.horizon || "CORTO")
       if (draft.selectedProducts) setSelectedProducts(draft.selectedProducts)
     }
-    api<Visit>(`/api/v1/visits/${id}`)
-      .then((data) => {
+    async function load() {
+      try {
+        if (isOfflineMode()) {
+          const cachedVisit = (await getCachedVisit(id!)) as Visit | null
+          if (!cachedVisit) throw new Error("Visita no está en la caché local.")
+          setVisit(cachedVisit)
+          setPhotos(cachedVisit.photos || [])
+          const cachedClient = (await getCachedClient(cachedVisit.client_id)) as ClientDetail | null
+          if (cachedClient) setClient(cachedClient)
+          setProducts((await listCachedProducts()) as Product[])
+          return
+        }
+        const data = await api<Visit>(`/api/v1/visits/${id}`)
         setVisit(data)
         setPhotos(data.photos || [])
-        return api<ClientDetail>(`/api/v1/clients/${data.client_id}`)
-      })
-      .then((detail) => {
+        const detail = await api<ClientDetail>(`/api/v1/clients/${data.client_id}`)
         setClient(detail)
-        return api<{ results: Product[] }>(`/api/v1/products?client=${detail.id}`)
-      })
-      .then((catalog) => setProducts(catalog.results))
-      .catch((err) => setError(err instanceof Error ? err.message : "No se pudo abrir la visita"))
+        const catalog = await api<{ results: Product[] }>(`/api/v1/products?client=${detail.id}`)
+        setProducts(catalog.results)
+      } catch (err) {
+        const cachedVisit = id ? ((await getCachedVisit(id)) as Visit | null) : null
+        if (cachedVisit) {
+          setVisit(cachedVisit)
+          setPhotos(cachedVisit.photos || [])
+          const cachedClient = (await getCachedClient(cachedVisit.client_id)) as ClientDetail | null
+          if (cachedClient) setClient(cachedClient)
+          setProducts((await listCachedProducts()) as Product[])
+          setError("Mostrando visita en caché.")
+        } else {
+          setError(err instanceof Error ? err.message : "No se pudo abrir la visita")
+        }
+      }
+    }
+    void load()
     setDraftReady(true)
   }, [id])
 
@@ -221,6 +254,20 @@ export function VisitaScreen() {
     setError("")
     locate(async (fix) => {
       try {
+        if (isOfflineMode()) {
+          await enqueueMutation({
+            method: "POST",
+            path: `/api/v1/visits/${id}/start`,
+            body: { gps: { ...fix, capture_mode: "OFFLINE" } },
+          })
+          setVisit({
+            ...visit!,
+            status: "EN_CURSO",
+            started_at: new Date().toISOString(),
+          })
+          setCapturing(false)
+          return
+        }
         const updated = await api<Visit>(`/api/v1/visits/${id}/start`, { method: "POST", body: JSON.stringify({ gps: fix }) })
         setVisit(updated)
         setCapturing(false)
@@ -232,6 +279,11 @@ export function VisitaScreen() {
   }
 
   async function upload(file: File) {
+    if (isOfflineMode()) {
+      const pending = await enqueueVisitPhoto(id!, file)
+      setPhotos((current) => [...current, { id: pending.id, thumbnail: pending.thumbnail }])
+      return
+    }
     const body = new FormData()
     body.set("file", file)
     const saved = await api<{ id: string; thumbnail: string }>(`/api/v1/visits/${id}/evidence`, { method: "POST", body })
@@ -295,6 +347,8 @@ export function VisitaScreen() {
             : visit.gps_check,
         })
         setSheetOpen(true)
+        haptic("success")
+        showToast(notDone ? "Visita marcada como no realizada" : "Visita cerrada", "ok")
         return
       }
       const updated = await api<Visit>(path, {
@@ -304,6 +358,8 @@ export function VisitaScreen() {
       localStorage.removeItem(`nc-draft-visit-${id}`)
       setVisit(updated)
       setSheetOpen(true)
+      haptic("success")
+      showToast(notDone ? "Visita marcada como no realizada" : "Visita cerrada", "ok")
     } catch (err) {
       setError(err instanceof Error ? err.message : "No se pudo cerrar la visita")
     } finally {
@@ -359,7 +415,11 @@ export function VisitaScreen() {
           </div>
           <div className="nc-campo-dl-row">
             <span>Cultivos</span>
-            <span>—</span>
+            <span>
+              {client.crops?.length
+                ? client.crops.map((c) => `${c.name} (${c.area_ha} ha)`).join(", ")
+                : "Sin cultivos"}
+            </span>
           </div>
           <div className="nc-campo-dl-row">
             <span>Última visita</span>
@@ -385,7 +445,9 @@ export function VisitaScreen() {
                 block
                 icon="map"
                 type="button"
-                onClick={() => window.open(mapsDirectionsUrl(site.latitude!, site.longitude!), "_blank", "noopener,noreferrer")}
+                onClick={() => {
+                  window.location.href = mapsDirectionsUrl(site.latitude!, site.longitude!)
+                }}
               >
                 Cómo llegar
               </Button>

@@ -1,4 +1,4 @@
-import type { ZoneBarRow } from "../shared/placeholderData"
+import type { ZoneBarRow } from "../shared/metrics"
 
 export function ZoneComplianceBars({ zones }: { zones: ZoneBarRow[] }) {
   return (
@@ -7,6 +7,7 @@ export function ZoneComplianceBars({ zones }: { zones: ZoneBarRow[] }) {
         <h2>Zonas · cumplimiento a la fecha</h2>
         <span className="nc-portal-muted">Misma escala · la marca es el 100 % de la meta a la fecha</span>
       </div>
+      {zones.length === 0 ? <p className="nc-portal-muted">Sin zonas en tu alcance.</p> : null}
       {zones.map((z) => (
         <div key={z.id} className="nc-mgmt-zone-row">
           <span className="nc-mgmt-zone-label">

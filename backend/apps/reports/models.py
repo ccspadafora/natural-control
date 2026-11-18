@@ -58,6 +58,7 @@ class ExportKind(models.TextChoices):
     CLIENTS_XLSX = "CLIENTS_XLSX", "Clientes Excel"
     FORECAST_XLSX = "FORECAST_XLSX", "Forecast Excel"
     AUDIT_XLSX = "AUDIT_XLSX", "Auditoría Excel"
+    LEAGUE_PDF = "LEAGUE_PDF", "Liga PDF"
 
 
 class ExportJob(BaseModel):

@@ -35,8 +35,11 @@ urlpatterns = [
     path("api/v1/", include("apps.automation.urls")),
     path("api/v1/", include("apps.integrations.urls")),
     path("api/v1/", include("apps.reports.urls")),
+    path("api/v1/", include("apps.goals.urls")),
+    path("api/v1/", include("apps.forecast.urls")),
     path("api/v1/", include("apps.audit.urls")),
     path("api/v1/", include("apps.accounts.devices_urls")),
+    path("api/v1/", include("apps.accounts.admin_urls")),
 ]
 
 if settings.DEBUG:

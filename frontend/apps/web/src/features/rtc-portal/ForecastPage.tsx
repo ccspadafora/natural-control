@@ -1,26 +1,48 @@
+import { useEffect, useState } from "react"
+import { api } from "@nc/api"
 import type { SessionUser } from "@nc/domain"
-import { Badge, Button, ComplianceMeter, Format, StatTile } from "@nc/ui"
+import { Badge, ComplianceMeter, Format, StatTile } from "@nc/ui"
 import { Link } from "react-router-dom"
+import { monthLong, type Forecast } from "../mgmt/shared/metrics"
+import { useForecast } from "../mgmt/shared/useMetrics"
 import { PortalPage } from "./PortalPage"
 import { portalMonthEyebrow } from "./shared/format"
 
-const PRODUCTS = [
-  { name: "Trichobiol WP", opt: "$ 18,2 M", prob: "$ 14,0 M", com: "$ 11,5 M" },
-  { name: "Beauvebiol", opt: "$ 9,8 M", prob: "$ 7,2 M", com: "$ 6,1 M" },
-  { name: "Metabiol", opt: "$ 6,4 M", prob: "$ 4,8 M", com: "$ 3,9 M" },
-]
+type MyNumbers = {
+  sales: number
+  budget: number
+  expected: number
+  falta: number
+  day: number
+  days_in_month: number
+}
 
 export function ForecastPage({ user, onLogout }: { user: SessionUser; onLogout: () => void }) {
-  const now = new Date()
-  const day = now.getDate()
-  const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate()
-  const left = daysInMonth - day
-  const sales = 31_200_000
-  const budget = 34_000_000
-  const expected = budget * (day / daysInMonth)
-  const falta = budget - sales
-  const fcCom = 11_500_000
-  const fcProb = 14_000_000
+  const [kpi, setKpi] = useState<MyNumbers | null>(null)
+  const { data: forecast, error } = useForecast(4)
+
+  useEffect(() => {
+    api<MyNumbers>("/api/v1/metrics/my-numbers")
+      .then(setKpi)
+      .catch(() => setKpi(null))
+  }, [])
+
+  const sales = kpi?.sales ?? 0
+  const budget = kpi?.budget ?? 0
+  const expected = kpi?.expected ?? 0
+  const falta = kpi?.falta ?? Math.max(0, budget - sales)
+  const day = kpi?.day ?? 1
+  const daysInMonth = kpi?.days_in_month ?? 30
+  const gap = forecast?.gap
+  const left = gap?.days_left ?? daysInMonth - day
+  const fcCom = forecast?.totals.committed ?? 0
+  const fcProb = forecast?.totals.probable ?? 0
+  const behind = expected > 0 && sales < expected
+  const months = forecast?.by_month ?? []
+  const rangeTitle =
+    months.length > 1
+      ? `Forecast de ${monthLong(months[0].month).toLowerCase()} a ${monthLong(months[months.length - 1].month).toLowerCase()}`
+      : "Forecast de los próximos meses"
 
   return (
     <PortalPage user={user} onLogout={onLogout}>
@@ -30,6 +52,8 @@ export function ForecastPage({ user, onLogout }: { user: SessionUser; onLogout: 
         </span>
         <h1>Mi forecast</h1>
       </header>
+
+      {error ? <p className="nc-note">{error}</p> : null}
 
       <div className="nc-portal-split">
         <section className="nc-portal-card nc-portal-stack nc-portal-stack-tight">
@@ -42,7 +66,7 @@ export function ForecastPage({ user, onLogout }: { user: SessionUser; onLogout: 
             </div>
             <div>
               <span className="nc-portal-muted">Llevas de la meta del mes</span>
-              <strong>{Format.percent((sales / budget) * 100)}</strong>
+              <strong>{budget > 0 ? Format.percent((sales / budget) * 100) : "—"}</strong>
               <span className="nc-portal-muted">{Format.money(sales)}</span>
             </div>
             <div>
@@ -50,11 +74,13 @@ export function ForecastPage({ user, onLogout }: { user: SessionUser; onLogout: 
               <strong>{Format.money(falta)}</strong>
             </div>
           </div>
-          <Badge tone="warning" icon="alert">
-            Vas un poco atrás del ritmo
-          </Badge>
+          {expected > 0 ? (
+            <Badge tone={behind ? "warning" : "success"} icon={behind ? "alert" : "check"}>
+              {behind ? "Vas un poco atrás del ritmo" : "Vas al ritmo de la meta"}
+            </Badge>
+          ) : null}
           <p className="nc-portal-muted">
-            Proyección al cierre: {Format.money(sales * (daysInMonth / day))}. A la fecha deberías llevar {Format.money(expected)}.
+            Proyección al cierre: {Format.money(sales * (daysInMonth / Math.max(1, day)))}. A la fecha deberías llevar {Format.money(expected)}.
           </p>
         </section>
 
@@ -65,10 +91,8 @@ export function ForecastPage({ user, onLogout }: { user: SessionUser; onLogout: 
             <ForecastBar label="Comprometido" value={fcCom} max={falta} tone="var(--chart-1)" />
             <ForecastBar label="Probable" value={fcProb} max={falta} tone="var(--chart-3)" />
           </div>
-          <Badge tone="warning" icon="alert">
-            Te alcanza si cierras lo probable
-          </Badge>
-          <p className="nc-portal-muted">Oportunidades de horizonte corto que cierran antes de fin de mes.</p>
+          {forecast ? <ReachBadge falta={falta} forecast={forecast} /> : null}
+          <p className="nc-portal-muted">Calculado con el potencial abierto de tus visitas.</p>
         </section>
       </div>
 
@@ -77,19 +101,19 @@ export function ForecastPage({ user, onLogout }: { user: SessionUser; onLogout: 
         <div className="nc-portal-kpi-row">
           <div>
             <span className="nc-portal-muted">Ticket promedio</span>
-            <strong>{Format.money(2_800_000)}</strong>
+            <strong>{gap ? Format.money(gap.ticket_avg) : "—"}</strong>
           </div>
           <div>
             <span className="nc-portal-muted">Tasa de cierre de citas</span>
-            <strong>38 %</strong>
+            <strong>{gap ? Format.percent(gap.close_rate * 100) : "—"}</strong>
           </div>
           <div>
             <span className="nc-portal-muted">Negocios que te faltan</span>
-            <strong>1</strong>
+            <strong>{gap && gap.ticket_avg > 0 ? Math.ceil(gap.falta / gap.ticket_avg) : "—"}</strong>
           </div>
           <div className="nc-portal-highlight">
             <span className="nc-portal-muted">Citas que debes agendar</span>
-            <strong>{Math.ceil(falta / 2_800_000 / 0.38)}</strong>
+            <strong>{gap ? gap.visits_needed : "—"}</strong>
           </div>
         </div>
         <Link className="nc-btn nc-btn-secondary" to="/portal/programacion">
@@ -97,11 +121,11 @@ export function ForecastPage({ user, onLogout }: { user: SessionUser; onLogout: 
         </Link>
       </section>
 
-      <h2>Forecast de noviembre a febrero</h2>
+      <h2>{rangeTitle}</h2>
       <div className="nc-portal-metrics">
-        <StatTile label="Optimista" value="$ 38,4 M" />
-        <StatTile label="Probable" value="$ 33,1 M" />
-        <StatTile label="Comprometido" value="$ 29,6 M" />
+        <StatTile label="Optimista" value={forecast ? Format.money(forecast.totals.optimistic) : "—"} />
+        <StatTile label="Probable" value={forecast ? Format.money(forecast.totals.probable) : "—"} />
+        <StatTile label="Comprometido" value={forecast ? Format.money(forecast.totals.committed) : "—"} />
       </div>
 
       <div className="nc-table-wrap">
@@ -115,19 +139,34 @@ export function ForecastPage({ user, onLogout }: { user: SessionUser; onLogout: 
             </tr>
           </thead>
           <tbody>
-            {PRODUCTS.map((row) => (
-              <tr key={row.name}>
-                <td>{row.name}</td>
-                <td style={{ textAlign: "right" }}>{row.opt}</td>
-                <td style={{ textAlign: "right" }}>{row.prob}</td>
-                <td style={{ textAlign: "right" }}>{row.com}</td>
+            {(forecast?.by_product ?? []).length === 0 ? (
+              <tr>
+                <td colSpan={4} className="nc-empty">
+                  Aún no tienes potencial abierto por producto.
+                </td>
               </tr>
-            ))}
+            ) : (
+              forecast!.by_product.map((row) => (
+                <tr key={row.id}>
+                  <td>{row.name}</td>
+                  <td style={{ textAlign: "right" }}>{Format.money(row.optimistic)}</td>
+                  <td style={{ textAlign: "right" }}>{Format.money(row.probable)}</td>
+                  <td style={{ textAlign: "right" }}>{Format.money(row.committed)}</td>
+                </tr>
+              ))
+            )}
           </tbody>
         </table>
       </div>
     </PortalPage>
   )
+}
+
+function ReachBadge({ falta, forecast }: { falta: number; forecast: Forecast }) {
+  if (falta <= 0) return <Badge tone="success" icon="check">Ya llegaste a la meta</Badge>
+  if (forecast.totals.committed >= falta) return <Badge tone="success" icon="check">Te alcanza con lo comprometido</Badge>
+  if (forecast.totals.probable >= falta) return <Badge tone="warning" icon="alert">Te alcanza si cierras lo probable</Badge>
+  return <Badge tone="danger" icon="alert">Aún no te alcanza el forecast</Badge>
 }
 
 function ForecastBar({ label, value, max, tone }: { label: string; value: number; max: number; tone: string }) {

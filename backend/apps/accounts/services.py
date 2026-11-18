@@ -45,6 +45,8 @@ def _platform(user_agent: str) -> str:
 
 
 def _rate_ip(request, bucket: str, limit: int, window: int) -> None:
+    if getattr(settings, "AUTH_RATE_LIMIT_DISABLED", False):
+        return
     key = f"auth:ip:{bucket}:{_client_ip(request)}"
     count = cache.get(key, 0) + 1
     cache.set(key, count, window)
@@ -115,7 +117,7 @@ def _issue(user: User, request, remember: bool = True) -> tuple[str, str, Device
 
 def login(identifier: str, password: str, request, remember: bool = True) -> tuple[str, str, dict]:
     assert_app_request(request)
-    _rate_ip(request, "login", 10, 60)
+    _rate_ip(request, "login", 60, 60)
     identifier = identifier.strip()
     user = User.objects.filter(Q(email__iexact=identifier) | Q(username__iexact=identifier)).select_related("role").first()
     if user is None or not user.check_password(password):

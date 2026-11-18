@@ -3,6 +3,8 @@ import { Link, useNavigate } from "react-router-dom"
 import { api } from "@nc/api"
 import type { SessionUser } from "@nc/domain"
 import { FilterPills, Tabs, VisitCard, type VisitStatus } from "@nc/ui"
+import { AgendaMonthView } from "./AgendaMonthView"
+import { AgendaWeekView } from "./AgendaWeekView"
 import { PortalPage } from "./PortalPage"
 import { agendaDayParam, portalDayLabel, visitClock } from "./shared/format"
 
@@ -95,35 +97,33 @@ export function AgendaPage({ user, onLogout }: { user: SessionUser; onLogout: ()
         onChange={(id) => setViewMode(id as typeof viewMode)}
       />
 
-      {viewMode !== "lista" ? (
-        <p className="nc-portal-muted nc-portal-card">
-          La vista {viewMode === "semana" ? "semanal" : "mensual"} del calendario llegará en la siguiente iteración. Por ahora
-          usa la lista.
-        </p>
+      {viewMode === "semana" ? <AgendaWeekView /> : null}
+      {viewMode === "mes" ? <AgendaMonthView onPickDay={() => setViewMode("semana")} /> : null}
+
+      {viewMode === "lista" ? (
+        <>
+          {error ? <p className="nc-note">{error}</p> : null}
+          <Tabs items={tabItems} value={tab} onChange={(id) => setTab(id as AgendaTab)} label="Agenda" />
+          <div className="nc-portal-visit-grid">
+            {rows.length === 0 ? (
+              <p className="nc-portal-muted">No hay visitas en esta pestaña.</p>
+            ) : (
+              rows.map((visit) => (
+                <VisitCard
+                  key={visit.id}
+                  time={visitClock(visit.scheduled_start)}
+                  client={visit.client_name}
+                  site={visit.site}
+                  municipality={visit.municipality}
+                  status={cardStatus(visit)}
+                  reason={visit.reason}
+                  onClick={() => navigate(`/portal/clientes/${visit.client_id}`)}
+                />
+              ))
+            )}
+          </div>
+        </>
       ) : null}
-
-      {error ? <p className="nc-note">{error}</p> : null}
-
-      <Tabs items={tabItems} value={tab} onChange={(id) => setTab(id as AgendaTab)} label="Agenda" />
-
-      <div className="nc-portal-visit-grid">
-        {rows.length === 0 ? (
-          <p className="nc-portal-muted">No hay visitas en esta pestaña.</p>
-        ) : (
-          rows.map((visit) => (
-            <VisitCard
-              key={visit.id}
-              time={visitClock(visit.scheduled_start)}
-              client={visit.client_name}
-              site={visit.site}
-              municipality={visit.municipality}
-              status={cardStatus(visit)}
-              reason={visit.reason}
-              onClick={() => navigate(`/portal/clientes/${visit.client_id}`)}
-            />
-          ))
-        )}
-      </div>
     </PortalPage>
   )
 }

@@ -11,6 +11,11 @@ from apps.crm.api import (
     VisitCreateView,
     VisitReasonListView,
 )
+from apps.crm.location_api import (
+    LocationChangeCreateView,
+    LocationChangeDecideView,
+    LocationChangeListView,
+)
 
 urlpatterns = [
     path("clients", ClientListView.as_view()),
@@ -22,4 +27,7 @@ urlpatterns = [
     path("visits/agenda", AgendaView.as_view()),
     path("visits", VisitCreateView.as_view()),
     path("visit-reasons", VisitReasonListView.as_view()),
+    path("location-changes", LocationChangeListView.as_view()),
+    path("location-changes/create", LocationChangeCreateView.as_view()),
+    path("location-changes/<uuid:request_id>/decide", LocationChangeDecideView.as_view()),
 ]

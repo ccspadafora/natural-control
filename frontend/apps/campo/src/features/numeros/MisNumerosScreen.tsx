@@ -1,29 +1,52 @@
+import { useEffect, useState } from "react"
 import { Link, useOutletContext } from "react-router-dom"
+import { api } from "@nc/api"
 import type { SessionUser } from "@nc/domain"
 import { Badge, ComplianceMeter, Format } from "@nc/ui"
 
 type OutletCtx = { user: SessionUser }
 
+type MyNumbers = {
+  sales: number
+  budget: number
+  expected: number
+  falta: number
+  visits_done: number
+  visits_target: number
+  deals: number
+  day: number
+  days_in_month: number
+}
+
 export function MisNumerosScreen() {
   const { user } = useOutletContext<OutletCtx>()
   const pipelineOn = Boolean(user.features.pipeline)
+  const [data, setData] = useState<MyNumbers | null>(null)
+  const [error, setError] = useState("")
+
+  useEffect(() => {
+    api<MyNumbers>("/api/v1/metrics/my-numbers")
+      .then(setData)
+      .catch((err) => setError(err instanceof Error ? err.message : "No se pudieron cargar los números"))
+  }, [])
+
   const now = new Date()
   const month = new Intl.DateTimeFormat("es-CO", { month: "long", timeZone: "America/Bogota" }).format(now)
-  const day = now.getDate()
-  const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate()
+  const day = data?.day ?? now.getDate()
+  const daysInMonth = data?.days_in_month ?? new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate()
   const left = Math.max(1, daysInMonth - day)
 
-  const sales = 31_200_000
-  const budget = 34_000_000
-  const exp = budget * (day / daysInMonth)
-  const falta = budget - sales
-  const proj = (sales / day) * daysInMonth
-  const deals = 17
-  const visitsM = 61
+  const sales = data?.sales ?? 0
+  const budget = data?.budget ?? 0
+  const exp = data?.expected ?? (budget * day) / daysInMonth
+  const falta = data?.falta ?? Math.max(0, budget - sales)
+  const proj = day > 0 ? (sales / day) * daysInMonth : 0
+  const deals = data?.deals || 1
+  const visitsM = data?.visits_done || 1
   const ticket = sales / deals
   const rate = deals / visitsM
-  const needDeals = Math.ceil(falta / ticket)
-  const needVisits = Math.ceil(needDeals / rate)
+  const needDeals = ticket > 0 ? Math.ceil(falta / ticket) : 0
+  const needVisits = rate > 0 ? Math.ceil(needDeals / rate) : 0
 
   return (
     <>
@@ -35,6 +58,9 @@ export function MisNumerosScreen() {
       </header>
 
       <section className="nc-campo-page">
+        {error ? <p className="nc-note">{error}</p> : null}
+        {!data && !error ? <p className="nc-kicker">Cargando…</p> : null}
+
         <ComplianceMeter label="Ventas · cumplimiento a la fecha" value={sales} target={budget} expected={exp} />
 
         <section
@@ -54,7 +80,7 @@ export function MisNumerosScreen() {
             </div>
             <div style={{ display: "grid", gap: 2 }}>
               <span>Llevas</span>
-              <span>{Format.percent((sales / budget) * 100)}</span>
+              <span>{budget ? Format.percent((sales / budget) * 100) : "—"}</span>
             </div>
             <div style={{ display: "grid", gap: 2 }}>
               <span>Te falta</span>
@@ -62,11 +88,12 @@ export function MisNumerosScreen() {
             </div>
           </div>
           <div style={{ display: "grid", gap: 4, borderTop: "1px solid var(--hairline)", paddingTop: "var(--space-3)" }}>
-            <Badge tone="warning" icon="alert">
-              A este ritmo no llegas a la meta
+            <Badge tone={proj >= budget ? "success" : "warning"} icon="alert">
+              {proj >= budget ? "Vas en ritmo de meta" : "A este ritmo no llegas a la meta"}
             </Badge>
             <span style={{ font: "var(--text-body)", color: "var(--ink-secondary)" }}>
-              Cierras en {Format.percent((proj / budget) * 100)} · te quedarían faltando {Format.money(budget - proj)}.
+              Cierras en {budget ? Format.percent((proj / budget) * 100) : "—"}
+              {proj < budget ? ` · te quedarían faltando ${Format.money(budget - proj)}.` : "."}
             </span>
           </div>
           <div
@@ -75,74 +102,39 @@ export function MisNumerosScreen() {
           >
             <div style={{ display: "grid", gap: 2 }}>
               <span>Vendes al día</span>
-              <span>{Format.money(sales / day)}</span>
+              <span>{Format.money(day ? sales / day : 0)}</span>
             </div>
             <div style={{ display: "grid", gap: 2 }}>
               <span>Necesitas al día</span>
-              <span>{Format.money(falta / left)}</span>
-              <span style={{ font: "var(--text-caption)", color: "var(--warning)" }}>
-                {Format.percent((falta / left / (sales / day) - 1) * 100)} más
-              </span>
+              <span>{Format.money(left ? falta / left : 0)}</span>
             </div>
           </div>
         </section>
 
-        <section className="nc-campo-forecast-card">
-          <span style={{ font: "var(--text-label)" }}>Para llegar a la meta</span>
-          <div style={{ display: "flex", alignItems: "baseline", gap: 8 }}>
-            <span style={{ font: "800 40px/44px var(--font-sans)", color: "var(--primary)", fontVariantNumeric: "tabular-nums" }}>
-              {needVisits}
-            </span>
-            <span style={{ font: "var(--text-body-lg)" }}>
-              citas por agendar · {Math.ceil(needVisits / left)} por día
-            </span>
-          </div>
+        <section style={{ display: "grid", gap: "var(--space-2)" }}>
+          <h2 className="nc-campo-section-title">Para llegar a la meta</h2>
+          <p className="nc-campo-section-meta" style={{ margin: 0 }}>
+            {needDeals} pedidos más · ~{needVisits} visitas · ticket {Format.money(ticket)}
+          </p>
           <div className="nc-campo-stat-grid">
             <div style={{ display: "grid", gap: 2 }}>
-              <span style={{ color: "var(--ink-secondary)" }}>Ticket promedio</span>
-              <span style={{ font: "var(--text-label)" }}>{Format.money(ticket)}</span>
+              <span>Visitas del mes</span>
+              <span>
+                {visitsM}
+                {data?.visits_target ? ` / ${data.visits_target}` : ""}
+              </span>
             </div>
             <div style={{ display: "grid", gap: 2 }}>
-              <span style={{ color: "var(--ink-secondary)" }}>Tasa de cierre</span>
-              <span style={{ font: "var(--text-label)" }}>{Format.percent(rate * 100)}</span>
-            </div>
-            <div style={{ display: "grid", gap: 2 }}>
-              <span style={{ color: "var(--ink-secondary)" }}>Negocios que faltan</span>
-              <span style={{ font: "var(--text-label)" }}>{needDeals}</span>
+              <span>Pedidos</span>
+              <span>{deals}</span>
             </div>
           </div>
-        </section>
-
-        <section
-          style={{
-            background: "var(--surface)",
-            border: "1px solid var(--hairline)",
-            borderRadius: "var(--radius-md)",
-            padding: "var(--space-4)",
-            display: "grid",
-            gap: "var(--space-3)",
-          }}
-        >
-          <span style={{ font: "var(--text-subtitle)" }}>¿Te alcanza el forecast?</span>
-          <span style={{ font: "var(--text-body)", color: "var(--ink-secondary)" }}>
-            Placeholder hasta conectar forecast en vivo.
-          </span>
         </section>
 
         {pipelineOn ? (
-          <section style={{ display: "grid", gap: "var(--space-2)" }}>
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
-              <h2 className="nc-campo-section-title" style={{ margin: 0 }}>
-                Mis oportunidades
-              </h2>
-              <Link className="nc-text-link" to="/numeros/oportunidades">
-                Ver listado
-              </Link>
-            </div>
-            <p style={{ font: "var(--text-body)", color: "var(--ink-secondary)", margin: 0 }}>
-              Consulta el embudo comercial y el valor en juego por cliente.
-            </p>
-          </section>
+          <Link to="/numeros/oportunidades" className="nc-campo-link-row">
+            Ver oportunidades
+          </Link>
         ) : null}
       </section>
     </>

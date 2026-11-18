@@ -2,9 +2,11 @@ import { FormEvent, ReactNode, useEffect, useState } from "react"
 import { Link, useLocation, useNavigate, useParams } from "react-router-dom"
 import { api, openStream } from "@nc/api"
 import type { SessionUser } from "@nc/domain"
-import { Button, PageHead, TextField } from "@nc/ui"
+import { Badge, Button, PageHead, TextField, TOAST } from "@nc/ui"
 import { PortalShell } from "./features/shell/PortalShell"
 import { useGeoPending } from "./features/leader/useGeoPending"
+import { useExport } from "./features/mgmt/shared/useMetrics"
+import { useToast } from "./features/shared/useToast"
 
 const ROLE_LABEL: Record<string, string> = {
   ADMIN: "Administración",
@@ -162,6 +164,7 @@ export function ConsoleShell({
 type ClientRow = {
   id: string
   name: string
+  legal_name?: string
   municipality: string
   phone: string
   status: string
@@ -176,7 +179,11 @@ export function PortfolioPage({ user, onLogout }: { user: SessionUser; onLogout:
   const [rows, setRows] = useState<ClientRow[]>([])
   const [live, setLive] = useState("")
   const [error, setError] = useState("")
+  const [q, setQ] = useState("")
+  const exporter = useExport()
+  const toast = useToast()
   const canMove = user.permissions.includes("clients.reassign")
+  const canExport = user.permissions.includes("clients.export")
 
   useEffect(() => {
     api<{ results: ClientRow[] }>("/api/v1/clients")
@@ -191,45 +198,94 @@ export function PortfolioPage({ user, onLogout }: { user: SessionUser; onLogout:
     return stop
   }, [])
 
+  const norm = (text: string) => text.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase()
+  const visible = rows.filter((c) => {
+    const needle = norm(q.trim())
+    if (!needle) return true
+    return [c.name, c.legal_name, c.municipality, c.owner_name].some((v) => norm(v || "").includes(needle))
+  })
+
+  async function exportXls() {
+    if (!canExport) {
+      toast.show("Tu perfil aún no tiene la exportación habilitada. Pídesela a tu administrador.", "warning")
+      return
+    }
+    toast.show("Generando el archivo…", "neutral")
+    const ok = await exporter.start("CLIENTS_XLSX")
+    toast.show(ok ? TOAST.exportReady : TOAST.genericError, ok ? "success" : "danger")
+  }
+
+  const count = visible.length
   return (
     <ConsoleShell
       user={user}
       onLogout={onLogout}
-      title="Cartera"
-      lede="Clientes que están en tu alcance."
-      action={canMove ? <Link className="nc-btn nc-btn-primary" to="/consola/cartera/mover">Mover cartera</Link> : undefined}
+      title="Clientes"
+      lede={`${count} ${count === 1 ? "cliente" : "clientes"} en tu alcance`}
+      action={
+        <span className="nc-portal-actions">
+          <Button type="button" variant="secondary" disabled={exporter.busy} onClick={() => void exportXls()}>
+            {exporter.busy ? "Generando…" : "Exportar a Excel"}
+          </Button>
+          {canMove ? (
+            <Link className="nc-btn nc-btn-secondary" to="/consola/cartera/mover">
+              Mover cartera
+            </Link>
+          ) : null}
+          <Link className="nc-btn nc-btn-primary" to="/consola/clientes/nuevo">
+            Registrar cliente
+          </Link>
+        </span>
+      }
     >
       {notice ? <p className="nc-ok">{notice}</p> : null}
       {live ? <p className="nc-ok">{live}</p> : null}
       {error ? <p className="nc-note">{error}</p> : null}
-      <div className="nc-table-wrap">
+      <TextField
+        label="Buscar"
+        placeholder="Busca por nombre, comercial o municipio (sin tildes también)"
+        value={q}
+        onChange={(event) => setQ(event.target.value)}
+      />
+      <div className="nc-portal-card nc-table-wrap">
         <table className="nc-table">
           <thead>
             <tr>
               <th>Cliente</th>
-              <th>Comercial</th>
               <th>Municipio</th>
               <th>Teléfono</th>
               <th>Estado</th>
               <th>Última visita</th>
+              <th>RTC</th>
             </tr>
           </thead>
           <tbody>
-            {rows.length === 0 ? (
-              <tr><td className="nc-empty" colSpan={6}>Todavía no hay clientes en tu alcance.</td></tr>
-            ) : rows.map((client) => (
+            {visible.length === 0 ? (
+              <tr><td className="nc-empty" colSpan={6}>{rows.length === 0 ? "Todavía no hay clientes en tu alcance." : "Ningún cliente coincide con la búsqueda."}</td></tr>
+            ) : visible.map((client) => (
               <tr key={client.id}>
-                <td>{client.name}{client.is_new ? <span className="nc-new">Nuevo</span> : null}</td>
-                <td>{client.owner_name || "Sin comercial"}</td>
+                <td>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                    <span className="nc-portal-task-title">{client.name}</span>
+                    {client.is_new ? <Badge tone="accent">Nuevo</Badge> : null}
+                  </div>
+                  {client.legal_name ? <span className="nc-portal-mono">{client.legal_name}</span> : null}
+                </td>
                 <td>{client.municipality || "Sin sede"}</td>
                 <td>{client.phone || "—"}</td>
-                <td><span className={client.status === "ACTIVO" ? "nc-status is-on" : client.status === "PERDIDO" ? "nc-status is-bad" : "nc-status"}><i />{CLIENT_STATUS[client.status] || client.status}</span></td>
+                <td>
+                  <Badge tone={client.status === "ACTIVO" ? "success" : client.status === "PROSPECTO" ? "accent" : client.status === "PERDIDO" ? "warning" : "neutral"}>
+                    {CLIENT_STATUS[client.status] || client.status}
+                  </Badge>
+                </td>
                 <td>{when(client.last_visit_at)}</td>
+                <td className="nc-portal-muted">{client.owner_name || "Sin comercial"}</td>
               </tr>
             ))}
           </tbody>
         </table>
       </div>
+      {toast.node}
     </ConsoleShell>
   )
 }
@@ -274,18 +330,18 @@ export function UsersPage({ user, onLogout }: { user: SessionUser; onLogout: () 
       onLogout={onLogout}
       title="Usuarios"
       lede="Personas con acceso a Campo y a la Consola."
-      action={<Link className="nc-btn nc-btn-primary" to="/consola/usuarios/nuevo">Nuevo usuario</Link>}
+      action={<Link className="nc-btn nc-btn-primary" to="/consola/usuarios/nuevo">Crear usuario</Link>}
     >
       {notice ? <p className="nc-ok">{notice}</p> : null}
       {error ? <p className="nc-note">{error}</p> : null}
-      <div className="nc-table-wrap">
+      <section className="nc-portal-card nc-table-wrap">
         <table className="nc-table">
           <thead>
             <tr>
               <th>Nombre</th>
-              <th>Correo</th>
               <th>Rol</th>
               <th>Zona</th>
+              <th>Correo</th>
               <th>Estado</th>
               <th />
             </tr>
@@ -293,17 +349,29 @@ export function UsersPage({ user, onLogout }: { user: SessionUser; onLogout: () 
           <tbody>
             {rows.map((person) => (
               <tr key={person.id}>
-                <td>{person.first_name} {person.last_name}</td>
-                <td>{person.email}</td>
+                <td>
+                  <strong>
+                    {person.first_name} {person.last_name}
+                  </strong>
+                </td>
                 <td>{person.role_name}</td>
                 <td>{person.zone_name || "—"}</td>
-                <td><span className={person.is_active ? "nc-status is-on" : "nc-status"}><i />{person.is_active ? "Activo" : "Inactivo"}</span></td>
-                <td><Button variant="quiet" type="button" onClick={() => toggle(person)}>{person.is_active ? "Desactivar" : "Reactivar"}</Button></td>
+                <td className="nc-portal-muted">{person.email}</td>
+                <td>
+                  <Badge tone={person.is_active ? "success" : "neutral"}>
+                    {person.is_active ? "Activo" : "Desactivado"}
+                  </Badge>
+                </td>
+                <td>
+                  <Button variant="quiet" type="button" onClick={() => toggle(person)}>
+                    {person.is_active ? "Desactivar" : "Reactivar"}
+                  </Button>
+                </td>
               </tr>
             ))}
           </tbody>
         </table>
-      </div>
+      </section>
     </ConsoleShell>
   )
 }
@@ -400,30 +468,47 @@ export function ZonesPage({ user, onLogout }: { user: SessionUser; onLogout: () 
   }, [])
 
   return (
-    <ConsoleShell user={user} onLogout={onLogout} title="Zonas" lede="Cobertura comercial y tolerancia del GPS.">
+    <ConsoleShell
+      user={user}
+      onLogout={onLogout}
+      title="Zonas y carteras"
+      lede="Cobertura comercial y tolerancia del GPS."
+      action={
+        <Link className="nc-btn nc-btn-secondary" to="/consola/cartera/mover">
+          Transferir cartera
+        </Link>
+      }
+    >
       {notice ? <p className="nc-ok">{notice}</p> : null}
       {error ? <p className="nc-note">{error}</p> : null}
-      <div className="nc-table-wrap">
-        <table className="nc-table">
-          <thead>
-            <tr>
-              <th>Zona</th>
-              <th>Tolerancia GPS</th>
-              <th>Municipios</th>
-              <th />
-            </tr>
-          </thead>
-          <tbody>
-            {zones.map((zone) => (
-              <tr key={zone.id}>
-                <td>{zone.name}</td>
-                <td>{meters(zone.gps_tolerance_m)}</td>
-                <td>{zone.municipalities.length ? zone.municipalities.map((town) => town.name).join(", ") : "Sin municipios"}</td>
-                <td><Link to={`/consola/zonas/${zone.id}`}>Editar</Link></td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+      <div className="nc-admin-zone-grid">
+        {zones.map((zone) => (
+          <Link key={zone.id} className="nc-portal-card nc-admin-zone-card" to={`/consola/zonas/${zone.id}`}>
+            <div className="nc-portal-card-head">
+              <div>
+                <h2>{zone.name}</h2>
+                <p className="nc-portal-muted">
+                  {zone.municipalities.length
+                    ? zone.municipalities
+                        .slice(0, 3)
+                        .map((town) => town.name)
+                        .join(", ") + (zone.municipalities.length > 3 ? "…" : "")
+                    : "Sin municipios"}
+                </p>
+              </div>
+            </div>
+            <div className="nc-admin-zone-stats">
+              <div>
+                <span>Municipios</span>
+                <strong>{zone.municipalities.length}</strong>
+              </div>
+              <div>
+                <span>Tolerancia GPS</span>
+                <strong>{meters(zone.gps_tolerance_m)}</strong>
+              </div>
+            </div>
+          </Link>
+        ))}
       </div>
     </ConsoleShell>
   )

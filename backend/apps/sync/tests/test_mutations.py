@@ -98,8 +98,11 @@ def test_sync_mutations_idempotent_visit_close(api):
 
 
 def test_sync_mutations_requires_feature_flag(api):
+    from django.core.cache import cache
+
     _auth(api)
     SystemSetting.objects.filter(key="feature.offline").update(value=False)
+    cache.delete("setting:feature.offline")
     response = api.post(
         "/api/v1/sync/mutations",
         {"mutations": []},

@@ -1,4 +1,4 @@
-import type { LeagueRtc } from "../shared/leagueData"
+import type { LeagueRtc } from "../shared/leagueMap"
 
 export function PlayerCard({ rtc }: { rtc: LeagueRtc }) {
   return (

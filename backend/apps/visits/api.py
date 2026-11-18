@@ -7,7 +7,9 @@ from apps.accounts.permissions import requires
 from apps.core.scoping import scope_queryset
 from apps.visits.evidence import store_photo
 from apps.visits.models import GpsCheck, GpsStatus
+from apps.visits.live import live_visits, parse_live_date
 from apps.visits.services import assign_visit, close_visit, mark_not_done, reassign_visit, register_now, review_check, start_visit, visit_for
+from apps.visits.suggestions import rtc_visit_load, visit_suggestions
 
 
 def _point(point):
@@ -66,6 +68,40 @@ def _visit(visit, check=None):
         "photos": photos,
         "gps_check": _check(close) if close else None,
     }
+
+
+class VisitLiveListView(APIView):
+    permission_classes = [requires("visits.view")]
+
+    def get(self, request):
+        try:
+            page = int(request.query_params.get("page") or 1)
+        except ValueError:
+            page = 1
+        payload = live_visits(
+            request.user,
+            day=parse_live_date(request.query_params.get("date")),
+            status=request.query_params.get("status") or None,
+            zone=request.query_params.get("zone") or None,
+            rtc=request.query_params.get("rtc") or None,
+            page=page,
+        )
+        return Response(payload)
+
+
+class VisitSuggestionsView(APIView):
+    permission_classes = [requires("visits.view")]
+
+    def get(self, request):
+        results = visit_suggestions(request.user, request.query_params.get("rtc_id"))
+        return Response({"results": results})
+
+
+class VisitLoadView(APIView):
+    permission_classes = [requires("visits.view")]
+
+    def get(self, request):
+        return Response({"results": rtc_visit_load(request.user)})
 
 
 class VisitDetailView(APIView):

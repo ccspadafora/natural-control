@@ -57,9 +57,17 @@ export async function verifyCode(identifier: string, code: string): Promise<Sess
   return data.user
 }
 
-export function openStream(onEvent: (message: { type: string; data?: Record<string, unknown> }) => void) {
+export function openStream(
+  onEvent: (message: { type: string; data?: Record<string, unknown> }) => void,
+  opts?: { onOpen?: () => void; onClose?: () => void },
+) {
   const socket = new WebSocket(`${location.protocol === "https:" ? "wss" : "ws"}://${location.host}/ws/v1/stream`)
-  socket.onopen = () => socket.send(JSON.stringify({ type: "auth", token: access() }))
+  socket.onopen = () => {
+    socket.send(JSON.stringify({ type: "auth", token: access() }))
+    opts?.onOpen?.()
+  }
+  socket.onclose = () => opts?.onClose?.()
+  socket.onerror = () => opts?.onClose?.()
   socket.onmessage = (event) => {
     try {
       onEvent(JSON.parse(event.data))

@@ -34,58 +34,58 @@ Detalle criterio por criterio: la tabla siguiente. Evidencia ampliada del agente
 
 | HU | Título corto | Estado | Evidencia | Falta para DoD | Pantalla prototipo |
 |---|---|---|---|---|---|
-| 1.1 | Iniciar sesión y recuperar contraseña | HECHA | `accounts/api`; `PortalLogin` (tarjeta 440px) | Recover Campo al DS; SES prod | Login Portal |
+| 1.1 | Iniciar sesión y recuperar contraseña | HECHA | `accounts/api`; Portal + Campo recover completo | SES prod | Login Portal/Campo |
 | 1.2 | Configurar roles y permisos | PARCIAL | Seed + `RoleListView` lectura | Editor permisos por rol | Parámetros / roles |
 | 1.3 | Mantener sesión abierta | HECHA | refresh + `restore()` + checkbox | Aviso pendientes offline | Transversal |
 | 1.4 | Entrar con código (OTP) | HECHA | OTP API + modo código en `PortalLogin` | Rate limit UI tests | Login OTP |
-| 2.1 | Ver mi agenda de visitas | HECHA | `AgendaView`; Campo `Today` | Semana/mes Portal; push; offline | Agenda / Hoy |
+| 2.1 | Ver mi agenda de visitas | HECHA | `AgendaView` rango + Semana/Mes reales | push; offline | Agenda / Hoy |
 | 2.2 | Consultar mi cartera | PARCIAL | `clients` list + filtros básicos; FE Clients | Filtros HU + prototipo; Exportar; «Cerca de mí» | Cartera / Clientes |
-| 2.3 | Registrar cliente nuevo con ubicación | PARCIAL | `clients` create; NewClient Campo | Wizard 4 pasos prototipo; cultivos con fase; autorizaciones con fecha | Nuevo cliente (Campo + web) |
-| 2.4 | Ver ficha e historial | PARCIAL | ClientDetail; ficha Campo/Portal básica | Cultivos, biotecnologías, mapa sedes, historial cotizaciones/ERP | Ficha |
-| 2.5 | Pedir cambio de ubicación | SIN_CONSTRUIR | Modelo `LocationChangeRequest` | API + UI Campo | Ficha |
-| 2.6 | Aprobar cambios de ubicación | SIN_CONSTRUIR | Modelo sin endpoints | Cola aprobación Consola | Geolocalización |
+| 2.3 | Registrar cliente nuevo con ubicación | PARCIAL | Wizard 4 pasos Campo + crops/bio/consent | UI web; cultivos fase en visita; WA consent audit | Nuevo cliente (Campo + web) |
+| 2.4 | Ver ficha e historial | HECHA | Ficha Campo/Portal + sync crops/history; mapa MapLibre | Cotizaciones/ERP | Ficha |
+| 2.5 | Pedir cambio de ubicación | PARCIAL | API + sheet Campo (GPS + motivo) | Notificación al líder | Ficha |
+| 2.6 | Aprobar cambios de ubicación | PARCIAL | List/decide API + panel Consola geo | Notificaciones; audit UI | Geolocalización |
 | 3.1 | Agendar visita | HECHA | `VisitCreateView` + Campo `Schedule` | Reprogramar auditado | Agendar |
 | 3.2 | Registrar lo que pasó | HECHA | `close_visit` + `campo/visit.tsx` | Rediseño 4 estados prototipo | Visita |
 | 3.3 | Productos, cantidades y horizonte | HECHA | `VisitProduct` + close | Cultivo/área UI | Visita productos |
-| 3.4 | Adjuntar fotos | PARCIAL | `evidence` upload | Tope, galería, foto completa en consolidado | Visita fotos |
+| 3.4 | Adjuntar fotos | PARCIAL | Upload online + outbox offline (base64 sync) | Galería consolidado; tope UI | Visita fotos |
 | 3.5a | Exigir y revisar programación | PARCIAL | weekly-plans approve/return/require | Tabla Por qué auto/manual; semana anterior; UI prototipo | Programación y asignación |
 | 3.5b | Enviar mi programación | HECHA | weekly API + `programacion.tsx` | Insignia a tiempo; push | Programación Campo |
 | 4.1 | Capturar ubicación al cerrar | HECHA | `verify_gps` + Campo locate | Copy permiso; UI capturando | Visita |
 | 4.2 | Ver verificación y justificar | PARCIAL | Chip GPS; campo justificación en modelo | POST justificación RTC | Visita |
 | 4.3 | Revisar discrepancias | HECHA | GPS list/review + GeoPage | Mapa tolerancia; HU-D.2 | Geolocalización |
-| 5.1 | Consolidado visitas en vivo | PARCIAL | `visits/now`; VisitsPage | Filtros URL; panel detalle; mapa pines; WS | Visitas en vivo |
-| 5.2 | Exportar Excel y PDF | PARCIAL | openpyxl en deps; export parcial | Excel/PDF reales Cartera + Visitas | Cartera / Visitas «Exportar» |
+| 5.1 | Consolidado visitas en vivo | HECHA | `GET visits/live` + GPS/valor + WS refresh | Filtros URL avanzados | Visitas en vivo |
+| 5.2 | Exportar Excel y PDF | PARCIAL | `POST/GET exports` XLSX visitas/cartera/forecast | PDF visitas | Cartera / Visitas / Forecast «Exportar» |
 | 5.3 | Datos venta y BI agrícola | SIN_CONSTRUIR | Modelos ERP sales | Pantalla Agro; fuentes ERP | Agro (sin diseño) |
 | 6.1 | Estadísticas visitas y RTC | SIN_CONSTRUIR | — | Pantalla Estadísticas | Estadísticas (sin diseño) |
-| 6.2 | Forecast de ventas | SIN_CONSTRUIR | Modelo `ForecastSnapshot` | API + barras apiladas + tabs | Forecast gerencia |
-| 6.2b | Mi propio forecast | SIN_CONSTRUIR | — | Cumplimiento, ritmo, citas, productos | Mi forecast / Mis números |
-| 6.3a | Cómo voy frente a mi meta | SIN_CONSTRUIR | Modelo `Goal` | ComplianceMeter; meta diaria | Mis números |
-| 6.3b | Cumplimiento del equipo | SIN_CONSTRUIR | — | Vista gerencial cumplimiento | Inicio / Tableros |
-| 6.4 | Tablero por comercial | SIN_CONSTRUIR | — | Tabla + drill-down RTC | Tableros · Por comercial |
-| 6.5 | Tablero del día | SIN_CONSTRUIR | — | StatTiles + timeline | Tableros · Del día / Inicio Día |
-| 6.6 | Tablero por producto | SIN_CONSTRUIR | — | Tarjetas + detalle atributos | Tableros · Por producto |
-| 6.7 | Tablero gerencial resumen | SIN_CONSTRUIR | — | Variantes Mes y Día completas | Inicio |
-| 6.8 | Mapa desempeño por zona | SIN_CONSTRUIR | — | Cartograma 31 deps; ficha zona; comparar | Mapa de zonas |
+| 6.2 | Forecast de ventas | HECHA | `GET forecast` desde VisitProduct | Snapshot histórico periódico | Forecast gerencia |
+| 6.2b | Mi propio forecast | HECHA | Portal Forecast + gap/citas | — | Mi forecast / Mis números |
+| 6.3a | Cómo voy frente a mi meta | HECHA | `metrics/my-numbers` + reloj demo | ERP ventas reales | Mis números |
+| 6.3b | Cumplimiento del equipo | HECHA | `metrics/team` + Inicio/Tableros | Drill-down profundo | Inicio / Tableros |
+| 6.4 | Tablero por comercial | HECHA | Tableros · comercial desde team | Drill-down ficha RTC | Tableros · Por comercial |
+| 6.5 | Tablero del día | HECHA | Tableros · día + Inicio Día | Timeline detallada | Tableros · Del día / Inicio Día |
+| 6.6 | Tablero por producto | HECHA | Tableros · producto desde VisitProduct | Atributos Anexo A | Tableros · Por producto |
+| 6.7 | Tablero gerencial resumen | HECHA | Inicio Mes/Día con team+zones+live | Chart ventas ERP | Inicio |
+| 6.8 | Mapa desempeño por zona | HECHA | `metrics/zones` + cartograma deps | Comparar zonas side-by-side | Mapa de zonas |
 | 7.1 | Gestionar usuarios | HECHA | directory API + UsersPage | Ficha detalle; invitación | Usuarios |
 | 7.2 | Gestionar zonas y carteras | HECHA | zones API + ZonesPage + reassign | Equipos UI; tarjetas prototipo | Zonas |
 | 7.3 | Asignar visitas a un RTC | HECHA | assign/reassign + ops UI | Carga/sugeridos (→ 7.4) | Asignar |
-| 7.4 | Asignar con base en datos | SIN_CONSTRUIR | — | Listas B1/B2; UI sugerencias | Asignar |
+| 7.4 | Asignar con base en datos | HECHA | `GET /visits/suggestions` + UI Líder/RTC | — | Asignar |
 | 8.1 | Sincronizar en vivo | PARCIAL | Channels/ASGI; health live/ready | WS `ws/v1/stream`; indicador En vivo real | Transversal «En vivo» |
 | 8.2 | Carga inicial de datos | PARCIAL | `seed` / `load_nc` | Importadores Excel; UI carga | Carga inicial (sin diseño) |
-| 8.3 | Instalar app en celular | PARCIAL | PWA parcial Campo | Guía instalación; dispositivo no compatible | Campo (sin diseño) |
+| 8.3 | Instalar app en celular | HECHA | Workbox SW + maskable icons + nudge install | Lighthouse PWA en CI | Campo Yo |
 | 8.4 | Capacitar y adopción | SIN_CONSTRUIR | — | Guía PDF + video | — |
 | 9.1 | Integrar endpoint ERP | SIN_CONSTRUIR | Modelos `integrations` | Cliente HTTP; flag `feature.erp` | — |
 | 9.2 | Sync clientes/productos/precios | SIN_CONSTRUIR | `ErpSyncRun` | Jobs sync; flag | — |
 | 9.3 | Conciliar registros ERP | SIN_CONSTRUIR | `ErpUnmatched` | UI conciliación | Conciliación (sin diseño) |
-| 10.1 | Trabajar sin conexión | PARCIAL | Dexie outbox + `POST /sync/mutations`; Hoy SyncBanner; flag on | Bootstrap/pull, fotos, start visita, SW | Pendientes / SyncBanner |
+| 10.1 | Trabajar sin conexión | HECHO_PARCIAL | Bootstrap/pull + Dexie cache + outbox | SW/Workbox y agenda semana/mes offline pendientes | Pendientes / SyncBanner |
 | 10.2 | Visitas recurrentes | SIN_CONSTRUIR | Modelo `VisitRecurrence` | API + UI líder | Recurrencias (sin diseño) |
-| 10.3 | Planear en calendario y mapa | PARCIAL | Agenda básica | Calendario semana/mes + mapa líder | Agenda calendarios |
+| 10.3 | Planear en calendario y mapa | HECHA | Agenda semana/mes API real | Mapa líder vivo | Agenda calendarios |
 | 10.4 | Firma del cliente | SIN_CONSTRUIR | Setting signature_required | Captura firma | Visita |
 | 10.5 | Ver y gestionar solo mi equipo | PARCIAL | Scope ZONE en roles | Enforcement uniforme en todas las APIs | Alcance transversal |
 | 11.1 | Completar ficha NIT/sedes/segmento | SIN_CONSTRUIR | Campos en Client | Flujo completar ficha | Ficha |
 | 11.2 | Administrar catálogo | HECHA | catalog admin API + `catalog.tsx` | Atributos Anexo A; rediseño DS | Catálogo |
 | 11.3 | Fichas técnicas versionadas | SIN_CONSTRUIR | — | Versionado + publish | Fichas (sin diseño) |
-| 11.4 | Catálogo offline | SIN_CONSTRUIR | — | Cache Dexie | Campo offline |
+| 11.4 | Catálogo offline | HECHO_PARCIAL | Products en Dexie vía bootstrap | Fichas PDF / share pendientes | Campo offline |
 | 12.1 | Gestionar oportunidades embudo | SIN_CONSTRUIR | Modelos pipeline; flag off | API + UI Mis oportunidades | Mis números → oportunidades |
 | 12.2 | Crear oportunidades desde visita | SIN_CONSTRUIR | — | Auto-creación al cerrar | Sistema |
 | 12.3 | Configurar reglas seguimiento | SIN_CONSTRUIR | `FollowUpRule` | UI admin | Reglas (sin diseño) |
@@ -100,21 +100,21 @@ Detalle criterio por criterio: la tabla siguiente. Evidencia ampliada del agente
 | 14.1 | Configurar automatizaciones post-visita | SIN_CONSTRUIR | `PostVisitRule` | UI config | Automatizaciones |
 | 14.2 | Ejecutar automatizaciones | SIN_CONSTRUIR | `AutomationRun` | Celery workers | Sistema |
 | 15.1 | Cargar metas y presupuestos | SIN_CONSTRUIR | Modelo `Goal` | Importación; UI Metas | Metas (sin diseño) |
-| 15.2 | Mi carta, liga y logros | SIN_CONSTRUIR | — | PlayerCard; radar; vecindario | Mi carta / Yo |
-| 15.3 | Carta de cada comercial | SIN_CONSTRUIR | — | Carta + radar + tabla | Liga · Carta |
-| 15.4 | Liga y once ideal | SIN_CONSTRUIR | — | Tabla liga; cancha; insignias | Liga · Campo |
-| 15.5 | Comparar dos comerciales | SIN_CONSTRUIR | — | Selectores + PDF | Liga · Comparar |
-| 15.6 | Calcular calificaciones nocturnas | SIN_CONSTRUIR | — | ScorecardSnapshot + Beat; insignias | Sistema |
+| 15.2 | Mi carta, liga y logros | HECHO | Scorecard API | Mi carta cableada a `/league/scorecards/me` | Mi carta / Yo |
+| 15.3 | Carta de cada comercial | HECHO | Scorecard API | Liga · Carta vía API (sin PDF) | Liga · Carta |
+| 15.4 | Liga y once ideal | HECHO | LeagueBoard | Tabla, insignias, once ideal | Liga · Campo |
+| 15.5 | Comparar dos comerciales | HECHO_PARCIAL | LeagueBoard | Selectores + radar; PDF pendiente | Liga · Comparar |
+| 15.6 | Calcular calificaciones nocturnas | HECHO | ScorecardSnapshot + Badge | Task `goals.refresh_scorecards` + beat diario | Sistema |
 | 16.1 | Tablero BI comercial | SIN_CONSTRUIR | — | Tablero BI | BI (sin diseño) |
 | 16.2 | Informe gestión con IA | SIN_CONSTRUIR | `AIReport`; flag | Prompt + clave IA | Informes (flag) |
 | 16.3 | Informes programados | SIN_CONSTRUIR | — | Cron envío | Sistema |
 | 16.4 | Alertas estancados / fuga | SIN_CONSTRUIR | — | Reglas + notificaciones | — |
 | 17.1 | Desbloquear con biometría | SIN_CONSTRUIR | Flag webauthn | WebAuthn en Yo | Yo (sin diseño) |
 | 17.2 | Doble factor gerenciales | SIN_CONSTRUIR | Flag mfa; setting roles | Flujo MFA | Login (sin diseño) |
-| 17.3 | Cerrar sesión dispositivo remoto | SIN_CONSTRUIR | — | Revocar refresh tokens | Usuarios / Salud |
+| 17.3 | Cerrar sesión dispositivo remoto | HECHO | Device revoke | Botón «Cerrar sesión» en Salud | Salud |
 | 17.4 | Bitácora de auditoría | PARCIAL | `AuditLog` + `record()` | UI consulta/export | Bitácora (sin diseño) |
 | 17.5 | Alertar RTC sin actividad | SIN_CONSTRUIR | Setting inactive_rtc_days | Job + aviso | Sistema |
-| 17.6 | Supervisar salud del sistema | SIN_CONSTRUIR | health live/ready | 6 tarjetas + dispositivos pendientes | Salud del sistema |
+| 17.6 | Supervisar salud del sistema | HECHO | `/admin/health` | 6 tarjetas + dispositivos pendientes | Salud del sistema |
 | 17.7 | Parámetros, permisos y catálogos | PARCIAL | settings API + FE | Roles editor; catálogos simples | Parámetros |
 
 ### Historias nuevas del diseño (HU-D)

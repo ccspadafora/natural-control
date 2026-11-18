@@ -1,13 +1,15 @@
 /* Shell + login alineados al prototipo Portal Natural Control */
 
 .nc-auth {
-  min-height: 100vh;
+  min-height: 100dvh;
+  height: 100dvh;
   display: grid;
   place-items: center;
-  padding: var(--space-6);
+  padding: calc(var(--space-6) + env(safe-area-inset-top)) var(--space-6) calc(var(--space-6) + env(safe-area-inset-bottom));
   box-sizing: border-box;
   background: var(--canvas);
   color: var(--ink);
+  overflow-y: auto;
 }
 
 .nc-auth-card {

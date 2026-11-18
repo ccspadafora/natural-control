@@ -1,11 +1,24 @@
 import { useEffect, useState } from "react"
-import { useNavigate } from "react-router-dom"
+import { useNavigate, useOutletContext } from "react-router-dom"
+import type { SessionUser } from "@nc/domain"
 import { Button, Icon } from "@nc/ui"
-import { getLastSyncAt, listPending, flushOutbox, isOfflineMode, useOutbox } from "../../offline"
+import {
+  getLastPullAt,
+  getLastSyncAt,
+  listPending,
+  flushOutbox,
+  isOfflineMode,
+  pullRemote,
+  useOutbox,
+} from "../../offline"
 import type { OutboxRow } from "../../offline/db"
+import { haptic } from "../shared/haptics"
+import { showToast } from "../shared/toast"
 
 function describeRow(row: OutboxRow) {
   if (row.path.includes("/clients")) return "Nuevo cliente"
+  if (row.path.endsWith("/evidence")) return "Foto de visita"
+  if (row.path.endsWith("/start")) return "Llegada a visita"
   if (row.path.endsWith("/close")) return "Cierre de visita"
   if (row.path.endsWith("/not-done")) return "Visita no realizada"
   return `${row.method} ${row.path}`
@@ -22,23 +35,38 @@ function ago(iso: string) {
 
 export function SincronizacionScreen() {
   const navigate = useNavigate()
+  const { user } = useOutletContext<{ user: SessionUser }>()
   const { pending, offline, syncing } = useOutbox()
   const [rows, setRows] = useState<OutboxRow[]>([])
   const [lastSync, setLastSync] = useState<string | null>(null)
 
   useEffect(() => {
     void listPending().then(setRows)
-    void getLastSyncAt().then(setLastSync)
+    void (async () => {
+      const a = await getLastSyncAt()
+      const b = await getLastPullAt()
+      setLastSync(a && b ? (a > b ? a : b) : a || b)
+    })()
   }, [pending, syncing])
 
   async function syncNow() {
     if (isOfflineMode()) {
-      window.alert("Sigues sin señal. Lo enviamos apenas vuelva.")
+      showToast("Sigues sin señal. Lo enviamos apenas vuelva.", "warn")
+      haptic("warn")
       return
+    }
+    try {
+      await pullRemote(user.id)
+    } catch {
+      /* pull opcional si mutations sí pueden */
     }
     await flushOutbox()
     setRows(await listPending())
-    setLastSync(await getLastSyncAt())
+    const a = await getLastSyncAt()
+    const b = await getLastPullAt()
+    setLastSync(a && b ? (a > b ? a : b) : a || b)
+    haptic("success")
+    showToast("Sincronización lista", "ok")
   }
 
   const headline =

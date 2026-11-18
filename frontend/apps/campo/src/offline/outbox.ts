@@ -85,6 +85,11 @@ export async function flushOutbox(): Promise<{ sent: number; failed: number }> {
       if (!result) continue
       if (result.status === "APPLIED") {
         await db.outbox.where("client_uuid").equals(row.client_uuid).delete()
+        if (row.path.includes("/evidence")) {
+          const blob = await db.blobs.get(row.client_uuid)
+          if (blob?.preview?.startsWith("blob:")) URL.revokeObjectURL(blob.preview)
+          await db.blobs.delete(row.client_uuid)
+        }
         sent += 1
       } else {
         failed += 1

@@ -2,6 +2,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from apps.sync.read import bootstrap, pull
 from apps.sync.services import apply_mutations
 
 
@@ -16,3 +17,21 @@ class SyncMutationsView(APIView):
             mutations = []
         results = apply_mutations(request.user, mutations)
         return Response({"results": results})
+
+
+class SyncBootstrapView(APIView):
+    """HU-10.1 · snapshot inicial para Campo offline."""
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        return Response(bootstrap(request.user))
+
+
+class SyncPullView(APIView):
+    """HU-10.1 · delta desde cursor opaco."""
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        return Response(pull(request.user, request.query_params.get("cursor")))

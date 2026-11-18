@@ -7,11 +7,10 @@ export function MensajesPage({ user, onLogout }: { user: SessionUser; onLogout: 
       user={user}
       onLogout={onLogout}
       title="Mensajes de WhatsApp"
-      lede="Bandeja de conversaciones — stub sin integración WABA."
-      feature="whatsapp"
+      lede="Bandeja de conversaciones de WhatsApp Business."
       fetchPath="/api/v1/whatsapp/conversations"
       emptyTitle="Sin conversaciones"
-      emptyBody="Conecta la cuenta de WhatsApp Business (WABA) para ver mensajes aquí."
+      emptyBody="Las conversaciones entrantes y salientes de tu cuenta WABA aparecerán aquí."
     />
   )
 }

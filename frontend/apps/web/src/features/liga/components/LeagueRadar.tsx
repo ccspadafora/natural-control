@@ -1,4 +1,4 @@
-import { ATTR } from "../shared/leagueData"
+import { ATTR } from "../shared/leagueMap"
 import { RADAR_AXES, RADAR_RINGS, axisLine, radarPoints } from "../shared/radar"
 
 export function LeagueRadar({

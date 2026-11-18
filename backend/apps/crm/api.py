@@ -197,11 +197,12 @@ class ProductListView(APIView):
     permission_classes = [requires("catalog.view")]
 
     def get(self, request):
-        client = client_for(request.user, request.query_params.get("client"))
+        client_id = request.query_params.get("client")
+        client = client_for(request.user, client_id) if client_id else None
         products = Product.objects.filter(is_deleted=False, is_active=True).order_by("name")
         results = []
         for product in products:
-            price = resolve_unit_price(client, product)
+            price = resolve_unit_price(client, product) if client is not None else None
             results.append(
                 {
                     "id": str(product.id),
@@ -210,7 +211,12 @@ class ProductListView(APIView):
                     "unit_price": str(price) if price is not None else None,
                 }
             )
-        return Response({"results": results, "price_list": client.price_list.name if client.price_list_id else None})
+        return Response(
+            {
+                "results": results,
+                "price_list": client.price_list.name if client and client.price_list_id else None,
+            }
+        )
 
 
 class AgendaView(APIView):
@@ -219,18 +225,27 @@ class AgendaView(APIView):
     def get(self, request):
         from datetime import datetime
 
-        raw = request.query_params.get("date")
-        moment = timezone.now()
-        if raw:
-            from django.utils.dateparse import parse_date
+        from django.utils.dateparse import parse_date
 
+        def _aware(raw: str | None):
+            if not raw:
+                return None
             parsed = parse_date(raw)
-            if parsed:
-                moment = timezone.make_aware(datetime(parsed.year, parsed.month, parsed.day, 12, 0), timezone.get_current_timezone())
+            if not parsed:
+                return None
+            return timezone.make_aware(
+                datetime(parsed.year, parsed.month, parsed.day, 12, 0),
+                timezone.get_current_timezone(),
+            )
+
+        moment = _aware(request.query_params.get("date") or request.query_params.get("from")) or timezone.now()
+        end_moment = _aware(request.query_params.get("to"))
         view = request.query_params.get("view") or "today"
+        if end_moment is not None and view == "today":
+            view = "range"
         today = timezone.localdate()
         results = []
-        for visit in agenda(request.user, moment, view):
+        for visit in agenda(request.user, moment, view, end_day=end_moment):
             when = timezone.localtime(visit.scheduled_start) if visit.scheduled_start else None
             late = bool(when and when.date() < today and visit.status in {VisitStatus.PROGRAMADA, VisitStatus.EN_CURSO})
             results.append(

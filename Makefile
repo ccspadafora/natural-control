@@ -49,13 +49,14 @@ test:
 	docker compose exec -e DJANGO_SETTINGS_MODULE=config.settings.test api uv run pytest -q
 
 test-fe:
-	cd frontend && pnpm --filter @nc/ui test && pnpm --filter web test && pnpm --filter campo test
+	cd frontend && pnpm test
 
 e2e:
 	cd frontend && pnpm exec playwright test
 
 parity:
-	cd frontend && pnpm exec playwright test --project=parity
+	-docker compose exec -T redis redis-cli FLUSHDB >/dev/null 2>&1
+	cd frontend && PARITY_FULL=$${PARITY_FULL:-0} pnpm parity
 
 lint:
 	docker compose exec api uv run ruff check apps config

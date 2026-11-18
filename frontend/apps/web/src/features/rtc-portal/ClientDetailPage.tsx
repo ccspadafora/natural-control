@@ -2,7 +2,7 @@ import { useEffect, useState } from "react"
 import { Link, useNavigate, useParams } from "react-router-dom"
 import { api } from "@nc/api"
 import type { SessionUser } from "@nc/domain"
-import { Badge, Button, PageHead } from "@nc/ui"
+import { Badge, Button, Format, Icon, PageHead } from "@nc/ui"
 import { PortalPage } from "./PortalPage"
 import { CLIENT_STATUS, statusTone } from "./shared/clients"
 import { visitAgo } from "./shared/format"
@@ -20,18 +20,22 @@ type ClientDetail = {
   kind?: string
   client_type?: string
   sites?: { id: string; name: string; municipality: string }[]
+  document?: string
+  segment?: string
+  status_label?: string
+  contact_name?: string
+  email?: string
+  data_consent_at?: string | null
+  crops?: { id: string; name: string; area_ha: number; phase: string }[]
+  biotechs?: { id: string; name: string; origin: string; tone: string }[]
+  history?: { when: string; text: string }[]
 }
 
-const HISTORY_STUB = [
-  { id: "1", when: "29 oct. · 10:52", result: "Pedido confirmado", reason: "Seguimiento" },
-  { id: "2", when: "12 oct. · 15:10", result: "Cotización solicitada", reason: "Presentación de producto" },
-  { id: "3", when: "28 sep. · 9:05", result: "Seguimiento programado", reason: "Seguimiento" },
-]
-
-const CROPS_STUB = [
-  { name: "Aguacate Hass", ha: 12, pct: 67 },
-  { name: "Fresa", ha: 6, pct: 33 },
-]
+function whatsappNumber(phone: string) {
+  const digits = phone.replace(/\D/g, "")
+  if (digits.length === 10) return `57${digits}`
+  return digits
+}
 
 export function ClientDetailPage({ user, onLogout }: { user: SessionUser; onLogout: () => void }) {
   const { id } = useParams()
@@ -66,15 +70,20 @@ export function ClientDetailPage({ user, onLogout }: { user: SessionUser; onLogo
   }
 
   const tipo = client.client_type || "Cliente"
-  const segment = "—"
-  const estado = CLIENT_STATUS[client.status] || client.status
-  const totalHa = CROPS_STUB.reduce((sum, c) => sum + c.ha, 0)
+  const segment = client.segment || "—"
+  const estado = client.status_label || CLIENT_STATUS[client.status] || client.status
+  const crops = client.crops ?? []
+  const biotechs = client.biotechs ?? []
+  const history = client.history ?? []
+  const totalHa = crops.reduce((sum, c) => sum + c.area_ha, 0)
+  const contact = client.contact_name || client.owner_name
+  const wa = client.phone ? whatsappNumber(client.phone) : ""
 
   return (
     <PortalPage user={user} onLogout={onLogout}>
       <PageHead
         title={client.name}
-        description={`${client.owner_name || "Sin contacto"} · ${client.legal_name || "—"} · ${client.municipality} · ${client.owner_name}`}
+        description={[contact || "Sin contacto", client.document || client.legal_name, client.municipality].filter(Boolean).join(" · ")}
         backHref="/portal/clientes"
         backLabel="Volver a la cartera"
         actions={
@@ -104,41 +113,69 @@ export function ClientDetailPage({ user, onLogout }: { user: SessionUser; onLogo
       <div className="nc-portal-split">
         <section className="nc-portal-card">
           <h2>Contacto</h2>
-          <span className="nc-portal-task-title">{client.owner_name || client.name}</span>
+          <span className="nc-portal-task-title">{contact || client.name}</span>
           <span className="nc-portal-muted">
-            {client.phone || "Sin teléfono"} · sin correo en ficha
+            {client.phone || "Sin teléfono"}
+            {client.email ? ` · ${client.email}` : ""}
           </span>
           <span className="nc-portal-actions">
-            <Button variant="outline" type="button" disabled>
-              Llamar
-            </Button>
-            <Button variant="outline" icon="message" type="button" disabled>
-              WhatsApp
-            </Button>
-            <Button variant="outline" type="button" disabled>
-              Correo
-            </Button>
+            {client.phone ? (
+              <>
+                <a className="nc-btn nc-btn-outline" href={`tel:${client.phone.replace(/\s/g, "")}`}>
+                  Llamar
+                </a>
+                <a className="nc-btn nc-btn-outline" href={`https://wa.me/${wa}`} target="_blank" rel="noopener noreferrer">
+                  <Icon name="message" />
+                  WhatsApp
+                </a>
+              </>
+            ) : (
+              <>
+                <Button type="button" variant="outline" disabled title="Este cliente no tiene teléfono registrado">
+                  Llamar
+                </Button>
+                <Button type="button" variant="outline" disabled title="Este cliente no tiene teléfono registrado">
+                  WhatsApp
+                </Button>
+              </>
+            )}
+            {client.email ? (
+              <a className="nc-btn nc-btn-outline" href={`mailto:${client.email}`}>
+                Correo
+              </a>
+            ) : null}
           </span>
-          <span className="nc-portal-muted">Consentimiento de datos: pendiente de conectar.</span>
+          <span className="nc-portal-muted">
+            {client.data_consent_at ? "Con consentimiento de datos." : "Consentimiento de datos pendiente."}
+          </span>
         </section>
 
         <section className="nc-portal-card">
           <div className="nc-portal-card-head">
             <h2>Cultivos</h2>
-            <span className="nc-portal-muted">{totalHa} ha</span>
+            <span className="nc-portal-muted">{Format.hectares(totalHa)}</span>
           </div>
-          {CROPS_STUB.map((crop) => (
-            <div key={crop.name} className="nc-portal-bar-row">
+          {crops.length === 0 ? <p className="nc-portal-muted">Sin cultivos registrados.</p> : null}
+          {crops.map((crop) => (
+            <div key={crop.id} className="nc-portal-bar-row">
               <div className="nc-portal-bar-labels">
                 <span>{crop.name}</span>
-                <span className="nc-portal-muted">{crop.ha} ha</span>
+                <span className="nc-portal-muted">{Format.hectares(crop.area_ha)}</span>
               </div>
               <div className="nc-portal-bar-track">
-                <div className="nc-portal-bar-fill" style={{ width: `${crop.pct}%` }} />
+                <div className="nc-portal-bar-fill" style={{ width: `${totalHa > 0 ? (crop.area_ha / totalHa) * 100 : 0}%` }} />
               </div>
             </div>
           ))}
-          <p className="nc-portal-muted">Datos de cultivos ilustrativos hasta conectar el maestro agronómico.</p>
+          {biotechs.length > 0 ? (
+            <span className="nc-portal-actions">
+              {biotechs.map((b) => (
+                <Badge key={b.id} tone={b.tone === "primary" ? "primary" : "neutral"}>
+                  {b.name} · {b.origin}
+                </Badge>
+              ))}
+            </span>
+          ) : null}
         </section>
       </div>
 
@@ -149,12 +186,11 @@ export function ClientDetailPage({ user, onLogout }: { user: SessionUser; onLogo
         </div>
         <p className="nc-portal-muted">Última visita registrada: {visitAgo(client.last_visit_at)}.</p>
         <ul className="nc-portal-history">
-          {HISTORY_STUB.map((row) => (
-            <li key={row.id}>
+          {history.length === 0 ? <li className="nc-portal-muted">Aún no hay visitas registradas.</li> : null}
+          {history.map((row, i) => (
+            <li key={`${row.when}-${i}`}>
               <span className="nc-portal-task-title">{row.when}</span>
-              <span className="nc-portal-muted">
-                {row.reason} · {row.result}
-              </span>
+              <span className="nc-portal-muted">{row.text}</span>
             </li>
           ))}
         </ul>

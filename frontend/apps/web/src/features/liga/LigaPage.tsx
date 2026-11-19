@@ -329,7 +329,10 @@ function AttrTable({
           {rows.map((row) => (
             <tr key={row.k}>
               <td>
-                <span>{row.k}</span> <span className="nc-portal-muted">{row.n}</span>
+                <div>
+                  <strong>{row.n}</strong> <span className="nc-portal-muted">({row.k})</span>
+                </div>
+                <div className="nc-portal-muted">{row.meaning}</div>
               </td>
               <td className="nc-mgmt-num">
                 <strong>{row.a}</strong>
@@ -339,7 +342,7 @@ function AttrTable({
                 {row.diff}
               </td>
               <td className="nc-portal-mono">{row.indicators}</td>
-              <td className="nc-portal-muted">{row.action}</td>
+              <td>{row.action}</td>
             </tr>
           ))}
         </tbody>

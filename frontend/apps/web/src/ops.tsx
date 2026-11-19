@@ -1,9 +1,11 @@
-import { FormEvent, useEffect, useState } from "react"
+import { FormEvent, useEffect, useMemo, useState } from "react"
 import { Link, useLocation, useNavigate, useParams } from "react-router-dom"
 import { api } from "@nc/api"
 import type { SessionUser } from "@nc/domain"
-import { Button } from "@nc/ui"
+import { Button, TextField } from "@nc/ui"
 import { ConsoleShell } from "./admin"
+import { ClientPicker } from "./features/shared/ClientPicker"
+import { TablePager } from "./features/shared/TablePager"
 
 type ClientRow = { id: string; name: string; municipality: string; owner_name: string }
 type Salesperson = { id: string; first_name: string; last_name: string; zone_name: string }
@@ -61,18 +63,33 @@ export function MovePortfolioPage({ user, onLogout }: { user: SessionUser; onLog
   const [picked, setPicked] = useState<string[]>([])
   const [ownerId, setOwnerId] = useState("")
   const [error, setError] = useState("")
+  const [clientQ, setClientQ] = useState("")
+  const [page, setPage] = useState(1)
   const people = useSalespeople()
+  const pageSize = 25
 
   useEffect(() => {
-    api<{ results: ClientRow[] }>("/api/v1/clients").then((data) => setClients(data.results))
+    api<{ results: ClientRow[] }>("/api/v1/clients?page_size=200").then((data) => setClients(data.results))
   }, [])
 
   useEffect(() => {
     if (!ownerId && people[0]) setOwnerId(people[0].id)
   }, [people, ownerId])
 
+  const norm = (text: string) => text.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase()
+  const filteredClients = useMemo(() => {
+    const needle = norm(clientQ.trim())
+    if (!needle) return clients
+    return clients.filter((c) => [c.name, c.municipality, c.owner_name].some((v) => norm(v || "").includes(needle)))
+  }, [clients, clientQ])
+  const pageClients = filteredClients.slice((page - 1) * pageSize, page * pageSize)
+
+  useEffect(() => {
+    setPage(1)
+  }, [clientQ])
+
   function toggle(id: string) {
-    setPicked((current) => current.includes(id) ? current.filter((item) => item !== id) : [...current, id])
+    setPicked((current) => (current.includes(id) ? current.filter((item) => item !== id) : [...current, id]))
   }
 
   async function submit(event: FormEvent) {
@@ -117,12 +134,19 @@ export function MovePortfolioPage({ user, onLogout }: { user: SessionUser; onLog
         </label>
         <div className="nc-checks">
           <span className="nc-field-label">Clientes</span>
-          {clients.map((client) => (
+          <TextField
+            label="Buscar cliente"
+            placeholder="Nombre, municipio o comercial"
+            value={clientQ}
+            onChange={(event) => setClientQ(event.target.value)}
+          />
+          {pageClients.map((client) => (
             <label key={client.id} className="nc-check">
               <input type="checkbox" checked={picked.includes(client.id)} onChange={() => toggle(client.id)} />
               {client.name} · {client.owner_name || "Sin comercial"}
             </label>
           ))}
+          <TablePager page={page} pageSize={pageSize} total={filteredClients.length} onPageChange={setPage} />
         </div>
         {error ? <p className="nc-note">{error}</p> : null}
         <div className="nc-panel-actions">
@@ -207,7 +231,7 @@ export function AssignVisitPage({ user, onLogout }: { user: SessionUser; onLogou
   const [error, setError] = useState("")
 
   useEffect(() => {
-    api<{ results: ClientRow[] }>("/api/v1/clients").then((data) => {
+    api<{ results: ClientRow[] }>("/api/v1/clients?page_size=200").then((data) => {
       setClients(data.results)
       setClientId(data.results[0]?.id || "")
     })
@@ -262,12 +286,7 @@ export function AssignVisitPage({ user, onLogout }: { user: SessionUser; onLogou
             {people.map((person) => <option key={person.id} value={person.id}>{person.first_name} {person.last_name}</option>)}
           </select>
         </label>
-        <label className="nc-field">
-          <span className="nc-field-label">Cliente</span>
-          <select className="nc-input" value={clientId} onChange={(event) => setClientId(event.target.value)}>
-            {clients.map((client) => <option key={client.id} value={client.id}>{client.name}</option>)}
-          </select>
-        </label>
+        <ClientPicker clients={clients} value={clientId} onChange={setClientId} />
         <label className="nc-field">
           <span className="nc-field-label">Fecha</span>
           <input className="nc-input" type="date" value={date} onChange={(event) => setDate(event.target.value)} required />

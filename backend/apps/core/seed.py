@@ -156,6 +156,13 @@ SETTINGS = [
     ("feature.mfa", False, ValueType.BOOL, "feature", "Doble factor"),
     ("feature.webauthn", False, ValueType.BOOL, "feature", "Biometría"),
     ("feature.catalog", True, ValueType.BOOL, "feature", "Consulta de productos y precios"),
+    (
+        "visits.reschedule_alert_monthly",
+        5,
+        ValueType.INT,
+        "visits",
+        "Umbral de reagendamientos por RTC en el mes; al alcanzarlo se marca alerta para líder/gerencia",
+    ),
 ]
 
 

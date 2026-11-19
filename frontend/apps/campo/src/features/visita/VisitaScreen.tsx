@@ -12,6 +12,7 @@ import {
 import {
   Badge,
   Button,
+  Format,
   GpsCheck,
   Icon,
   Tabs,
@@ -24,8 +25,35 @@ import { mapsDirectionsUrl, visitAgo } from "../shared/campo-format"
 import { haptic } from "../shared/haptics"
 import { showToast } from "../shared/toast"
 
-type Line = { product_id: string; kind: string; quantity: string; unit_price: string; horizon: string; month?: string }
+type CartLine = {
+  product_id: string
+  name: string
+  presentation: string
+  quantity: string
+  unit_price: string
+}
 type Product = { id: string; name: string; presentation: string; unit_price: string | null }
+
+function moneyDigits(value: string) {
+  return value.replace(/[^\d]/g, "")
+}
+
+/** API Decimal ("45000.00") → pesos enteros sin multiplicar por 100. */
+function pesosFromApi(value: string | null | undefined) {
+  if (value == null || value === "") return ""
+  const n = Number(String(value).replace(",", "."))
+  if (!Number.isFinite(n)) return ""
+  return String(Math.round(n))
+}
+
+function toNumber(value: string) {
+  const n = Number(moneyDigits(value) || "0")
+  return Number.isFinite(n) ? n : 0
+}
+
+function lineTotal(line: CartLine) {
+  return toNumber(line.quantity) * toNumber(line.unit_price)
+}
 type Site = { id: string; name: string; municipality: string; latitude: number | null; longitude: number | null }
 type ClientDetail = {
   id: string
@@ -98,14 +126,13 @@ export function VisitaScreen() {
   const [visit, setVisit] = useState<Visit | null>(null)
   const [client, setClient] = useState<ClientDetail | null>(null)
   const [products, setProducts] = useState<Product[]>([])
+  const [priceList, setPriceList] = useState<string | null>(null)
   const [outcome, setOutcome] = useState("cotizacion")
   const [notDone, setNotDone] = useState(false)
   const [notes, setNotes] = useState("")
   const [justification, setJustification] = useState("")
-  const [estimate, setEstimate] = useState("")
   const [horizon, setHorizon] = useState("CORTO")
-  const [selectedProducts, setSelectedProducts] = useState<Record<string, boolean>>({})
-  const [lines, setLines] = useState<Line[]>([])
+  const [lines, setLines] = useState<CartLine[]>([])
   const [photos, setPhotos] = useState<{ id: string; thumbnail: string }[]>([])
   const [gps, setGps] = useState<Record<string, unknown> | null>(null)
   const [liveGps, setLiveGps] = useState<{ status: GpsStatus; distanceM?: number; toleranceM: number } | null>(null)
@@ -128,17 +155,15 @@ export function VisitaScreen() {
         notDone: boolean
         notes: string
         justification: string
-        estimate: string
         horizon: string
-        selectedProducts: Record<string, boolean>
+        lines?: CartLine[]
       }
       setOutcome(draft.outcome || "cotizacion")
       setNotDone(Boolean(draft.notDone))
       setNotes(draft.notes || "")
       setJustification(draft.justification || "")
-      setEstimate(draft.estimate || "")
       setHorizon(draft.horizon || "CORTO")
-      if (draft.selectedProducts) setSelectedProducts(draft.selectedProducts)
+      if (draft.lines?.length) setLines(draft.lines)
     }
     async function load() {
       try {
@@ -157,8 +182,11 @@ export function VisitaScreen() {
         setPhotos(data.photos || [])
         const detail = await api<ClientDetail>(`/api/v1/clients/${data.client_id}`)
         setClient(detail)
-        const catalog = await api<{ results: Product[] }>(`/api/v1/products?client=${detail.id}`)
+        const catalog = await api<{ results: Product[]; price_list: string | null }>(
+          `/api/v1/products?client=${detail.id}`,
+        )
         setProducts(catalog.results)
+        setPriceList(catalog.price_list)
       } catch (err) {
         const cachedVisit = id ? ((await getCachedVisit(id)) as Visit | null) : null
         if (cachedVisit) {
@@ -181,9 +209,9 @@ export function VisitaScreen() {
     if (!draftReady || !id || visit?.status === "REALIZADA" || visit?.status === "NO_REALIZADA") return
     localStorage.setItem(
       `nc-draft-visit-${id}`,
-      JSON.stringify({ outcome, notDone, notes, justification, estimate, horizon, selectedProducts }),
+      JSON.stringify({ outcome, notDone, notes, justification, horizon, lines }),
     )
-  }, [draftReady, id, visit?.status, outcome, notDone, notes, justification, estimate, horizon, selectedProducts])
+  }, [draftReady, id, visit?.status, outcome, notDone, notes, justification, horizon, lines])
 
   const stage: Stage = useMemo(() => {
     if (!visit) return "antes"
@@ -197,21 +225,49 @@ export function VisitaScreen() {
   const showValue = !notDone && (outcome === "pedido" || outcome === "cotizacion")
   const fuera = liveGps?.status === "FUERA_DE_RANGO"
 
-  function toggleProduct(productId: string) {
-    setSelectedProducts((current) => {
-      const next = { ...current, [productId]: !current[productId] }
-      const picked = products.filter((p) => next[p.id])
-      setLines(
-        picked.map((p) => ({
-          product_id: p.id,
-          kind: outcome === "pedido" ? "CONCRETADO" : "POTENCIAL",
+  const cartTotal = useMemo(() => lines.reduce((sum, line) => sum + lineTotal(line), 0), [lines])
+  const inCart = useMemo(() => new Set(lines.map((line) => line.product_id)), [lines])
+
+  function addProduct(product: Product) {
+    setLines((current) => {
+      const existing = current.find((line) => line.product_id === product.id)
+      if (existing) {
+        return current.map((line) =>
+          line.product_id === product.id
+            ? { ...line, quantity: String(Math.max(1, toNumber(line.quantity) + 1)) }
+            : line,
+        )
+      }
+      return [
+        ...current,
+        {
+          product_id: product.id,
+          name: product.name,
+          presentation: product.presentation,
           quantity: "1",
-          unit_price: p.unit_price || estimate || "0",
-          horizon,
-        })),
-      )
-      return next
+          unit_price: pesosFromApi(product.unit_price),
+        },
+      ]
     })
+  }
+
+  function removeLine(productId: string) {
+    setLines((current) => current.filter((line) => line.product_id !== productId))
+  }
+
+  function patchLine(productId: string, patch: Partial<Pick<CartLine, "quantity" | "unit_price">>) {
+    setLines((current) =>
+      current.map((line) => (line.product_id === productId ? { ...line, ...patch } : line)),
+    )
+  }
+
+  function bumpQty(productId: string, delta: number) {
+    setLines((current) =>
+      current.map((line) => {
+        if (line.product_id !== productId) return line
+        return { ...line, quantity: String(Math.max(1, toNumber(line.quantity) + delta)) }
+      }),
+    )
   }
 
   function locate(onReady?: (fix: Record<string, unknown>) => void) {
@@ -284,10 +340,26 @@ export function VisitaScreen() {
       setPhotos((current) => [...current, { id: pending.id, thumbnail: pending.thumbnail }])
       return
     }
-    const body = new FormData()
-    body.set("file", file)
-    const saved = await api<{ id: string; thumbnail: string }>(`/api/v1/visits/${id}/evidence`, { method: "POST", body })
-    setPhotos((current) => [...current, saved])
+    const localUrl = URL.createObjectURL(file)
+    const tempId = `local-${crypto.randomUUID()}`
+    setPhotos((current) => [...current, { id: tempId, thumbnail: localUrl }])
+    try {
+      const body = new FormData()
+      body.set("file", file)
+      const saved = await api<{ id: string; thumbnail: string; url?: string }>(`/api/v1/visits/${id}/evidence`, {
+        method: "POST",
+        body,
+      })
+      const remote = saved.thumbnail || saved.url || ""
+      setPhotos((current) =>
+        current.map((ph) => (ph.id === tempId ? { id: saved.id, thumbnail: remote || localUrl } : ph)),
+      )
+      if (remote) URL.revokeObjectURL(localUrl)
+    } catch (err) {
+      setPhotos((current) => current.filter((ph) => ph.id !== tempId))
+      URL.revokeObjectURL(localUrl)
+      throw err
+    }
   }
 
   async function closeVisit(event: FormEvent) {
@@ -303,30 +375,37 @@ export function VisitaScreen() {
     setNotesError(nextNotesErr)
     setJustError(nextJust ? "Cuéntale a tu líder por qué estás lejos de la sede." : "")
     if (nextNotesErr || nextJust) return
+    if (!notDone && (outcome === "pedido" || outcome === "cotizacion") && lines.length === 0) {
+      setError(outcome === "pedido" ? "Un pedido confirmado necesita al menos un producto." : "Agrega al menos un producto a la cotización.")
+      return
+    }
+    if (!notDone && lines.some((line) => toNumber(line.quantity) <= 0)) {
+      setError("Cada producto del carrito necesita cantidad mayor a 0.")
+      return
+    }
+    if (showValue && lines.some((line) => toNumber(line.unit_price) <= 0)) {
+      setError("Indica el precio unitario de cada producto.")
+      return
+    }
 
     setBusy(true)
     setError("")
     try {
       if (!gps) locate()
+      const kind = outcome === "pedido" ? "CONCRETADO" : "POTENCIAL"
       const payload = notDone
         ? { reason: notes.trim() || "Cliente ausente", gps: gps || { error: "POSITION_UNAVAILABLE", capture_mode: "ONLINE" } }
         : {
             result: outcomeApi,
             notes: fuera && justification.trim() ? `${notes.trim()}\n\nUbicación: ${justification.trim()}` : notes.trim(),
             contact_name_free: client?.phone ? client.name : "",
-            products: lines
-              .filter((line) => line.product_id)
-              .map((line) => {
-                if (showValue && estimate && !line.unit_price) {
-                  return { ...line, unit_price: String(Number(estimate.replace(/\D/g, "")) || 0) }
-                }
-                if (line.kind === "POTENCIAL" && line.horizon === "LARGO" && line.month) {
-                  const [year, month] = line.month.split("-").map(Number)
-                  const last = new Date(year, month, 0).getDate()
-                  return { ...line, expected_date: `${line.month}-${String(last).padStart(2, "0")}` }
-                }
-                return line
-              }),
+            products: lines.map((line) => ({
+              product_id: line.product_id,
+              kind,
+              quantity: String(toNumber(line.quantity) || 1),
+              unit_price: String(toNumber(line.unit_price)),
+              ...(showValue ? { horizon } : {}),
+            })),
             gps: gps || { error: "POSITION_UNAVAILABLE", capture_mode: "ONLINE" },
           }
       const path = `/api/v1/visits/${id}/${notDone ? "not-done" : "close"}`
@@ -502,29 +581,35 @@ export function VisitaScreen() {
             ) : null}
 
             <div style={{ display: "grid", gap: 8 }}>
-              <span style={{ font: "var(--text-label)" }}>Resultado</span>
-              <div className="nc-campo-pill-grid">
+              <span style={{ font: "var(--text-label)" }}>Resultado de la visita</span>
+              <div className="nc-campo-outcome-list" role="radiogroup" aria-label="Resultado">
                 {OUTCOMES.map((o) => (
                   <button
                     key={o.id}
                     type="button"
+                    role="radio"
+                    aria-checked={outcome === o.id && !notDone}
                     className={outcome === o.id && !notDone ? "is-on" : ""}
                     onClick={() => {
                       setNotDone(false)
                       setOutcome(o.id)
                     }}
                   >
+                    <span className="nc-campo-outcome-dot" aria-hidden />
                     {o.label}
                   </button>
                 ))}
                 <button
                   type="button"
-                  className={notDone ? "is-on" : ""}
+                  role="radio"
+                  aria-checked={notDone}
+                  className={notDone ? "is-on is-muted" : "is-muted"}
                   onClick={() => {
                     setNotDone(true)
                     setOutcome("")
                   }}
                 >
+                  <span className="nc-campo-outcome-dot" aria-hidden />
                   No realizada
                 </button>
               </div>
@@ -532,38 +617,115 @@ export function VisitaScreen() {
 
             {!notDone ? (
               <>
-                <div style={{ display: "grid", gap: 8 }}>
-                  <span style={{ font: "var(--text-label)" }}>Productos ofrecidos</span>
-                  <div className="nc-campo-chip-row">
-                    {products.map((p) => (
-                      <button
-                        key={p.id}
-                        type="button"
-                        className={selectedProducts[p.id] ? "is-on" : ""}
-                        onClick={() => toggleProduct(p.id)}
-                      >
-                        {p.name}
-                      </button>
-                    ))}
+                <div className="nc-campo-cart">
+                  <div className="nc-campo-cart-head">
+                    <span style={{ font: "var(--text-label)" }}>Productos</span>
+                    <span style={{ font: "var(--text-caption)", color: "var(--ink-tertiary)" }}>
+                      {priceList ? `Lista ${priceList}` : "Sin lista de precios regional"}
+                    </span>
                   </div>
+                  <ul className="nc-campo-catalog">
+                    {products.map((p) => {
+                      const listed = pesosFromApi(p.unit_price)
+                      const added = inCart.has(p.id)
+                      return (
+                        <li key={p.id} className="nc-campo-catalog-row">
+                          <div className="nc-campo-catalog-meta">
+                            <strong>{p.name}</strong>
+                            <span style={{ color: "var(--ink-tertiary)" }}>
+                              {[p.presentation, listed ? Format.money(toNumber(listed)) : "Sin precio en lista"]
+                                .filter(Boolean)
+                                .join(" · ")}
+                            </span>
+                          </div>
+                          <Button type="button" variant={added ? "secondary" : "outline"} onClick={() => addProduct(p)}>
+                            {added ? "Sumar +1" : "Agregar"}
+                          </Button>
+                        </li>
+                      )
+                    })}
+                  </ul>
+                </div>
+
+                <div className="nc-campo-cart">
+                  <div className="nc-campo-cart-head">
+                    <span style={{ font: "var(--text-label)" }}>Carrito</span>
+                    <span style={{ font: "var(--text-caption)", color: "var(--ink-tertiary)" }}>
+                      {lines.length === 0 ? "Vacío" : `${lines.length} ítem${lines.length === 1 ? "" : "s"}`}
+                    </span>
+                  </div>
+                  {lines.length === 0 ? (
+                    <p style={{ margin: 0, font: "var(--text-caption)", color: "var(--ink-tertiary)" }}>
+                      Agrega productos del catálogo. El precio sale de la lista de la zona del cliente.
+                    </p>
+                  ) : (
+                    <ul className="nc-campo-cart-list">
+                      {lines.map((line) => (
+                        <li key={line.product_id} className="nc-campo-cart-line">
+                          <div className="nc-campo-cart-line-top">
+                            <div>
+                              <strong>{line.name}</strong>
+                              {line.presentation ? (
+                                <span style={{ color: "var(--ink-tertiary)" }}> · {line.presentation}</span>
+                              ) : null}
+                            </div>
+                            <button type="button" className="nc-campo-cart-remove" onClick={() => removeLine(line.product_id)}>
+                              Quitar
+                            </button>
+                          </div>
+                          <div className="nc-campo-cart-controls">
+                            <div className="nc-campo-qty">
+                              <button type="button" aria-label="Menos" onClick={() => bumpQty(line.product_id, -1)}>
+                                −
+                              </button>
+                              <input
+                                inputMode="numeric"
+                                value={line.quantity}
+                                aria-label={`Cantidad de ${line.name}`}
+                                onChange={(e) =>
+                                  patchLine(line.product_id, { quantity: moneyDigits(e.target.value) || "1" })
+                                }
+                              />
+                              <button type="button" aria-label="Más" onClick={() => bumpQty(line.product_id, 1)}>
+                                +
+                              </button>
+                            </div>
+                            <label className="nc-campo-price">
+                              <span>Precio unit. (lista)</span>
+                              <input
+                                inputMode="numeric"
+                                value={line.unit_price}
+                                placeholder="0"
+                                aria-label={`Precio de ${line.name}`}
+                                onChange={(e) =>
+                                  patchLine(line.product_id, { unit_price: moneyDigits(e.target.value) })
+                                }
+                              />
+                            </label>
+                            <div className="nc-campo-line-total">
+                              <span>Subtotal</span>
+                              <strong>{Format.money(lineTotal(line))}</strong>
+                            </div>
+                          </div>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                  {lines.length > 0 ? (
+                    <div className="nc-campo-cart-footer">
+                      <span>Total</span>
+                      <strong>{Format.money(cartTotal)}</strong>
+                    </div>
+                  ) : null}
                 </div>
 
                 {showValue ? (
-                  <div style={{ display: "grid", gap: "var(--space-3)" }}>
-                    <TextField
-                      label="Valor estimado ($)"
-                      inputMode="numeric"
-                      value={estimate}
-                      onChange={(e) => setEstimate(e.target.value)}
-                      helper="Suma al forecast de tu zona"
-                    />
-                    <div style={{ display: "grid", gap: 8 }}>
-                      <span style={{ font: "var(--text-label)" }}>Horizonte de cierre</span>
-                      <Tabs items={HZ} value={horizon} onChange={setHorizon} block label="Horizonte" />
-                      <span style={{ font: "var(--text-caption)", color: "var(--ink-tertiary)" }}>
-                        Corto: 0–30 días · mediano: 31–90 · largo: más de 90
-                      </span>
-                    </div>
+                  <div style={{ display: "grid", gap: 8 }}>
+                    <span style={{ font: "var(--text-label)" }}>Horizonte de cierre</span>
+                    <Tabs items={HZ} value={horizon} onChange={setHorizon} block label="Horizonte" />
+                    <span style={{ font: "var(--text-caption)", color: "var(--ink-tertiary)" }}>
+                      Corto: 0–30 días · mediano: 31–90 · largo: más de 90
+                    </span>
                   </div>
                 ) : null}
 

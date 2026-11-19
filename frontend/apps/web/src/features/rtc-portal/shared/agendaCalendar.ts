@@ -9,13 +9,44 @@ export const CAL_GRID_H = (H1 - H0) * HP
 
 export const CAL_HOURS = Array.from({ length: H1 - H0 + 1 }, (_, i) => H0 + i)
 
-export const STATUS_STYLE: Record<string, { bg: string; dot: string }> = {
-  REALIZADA: { bg: "var(--surface-sunken)", dot: "var(--success-solid)" },
-  PROGRAMADA: { bg: "var(--primary-tint)", dot: "var(--primary)" },
-  EN_CURSO: { bg: "var(--primary-tint)", dot: "var(--primary)" },
-  ATRASADA: { bg: "var(--danger-tint)", dot: "var(--danger-solid)" },
-  NO_REALIZADA: { bg: "var(--surface-sunken)", dot: "var(--border-control)" },
-  CANCELADA: { bg: "var(--surface-sunken)", dot: "var(--border-control)" },
+/** Contraste explícito para claro/oscuro: tinta + borde + texto forzados. */
+export const STATUS_STYLE: Record<string, { bg: string; border: string; ink: string; dot: string }> = {
+  REALIZADA: {
+    bg: "var(--success-tint)",
+    border: "var(--success)",
+    ink: "var(--ink)",
+    dot: "var(--success)",
+  },
+  PROGRAMADA: {
+    bg: "var(--primary-tint)",
+    border: "var(--primary)",
+    ink: "var(--ink)",
+    dot: "var(--primary)",
+  },
+  EN_CURSO: {
+    bg: "var(--accent-tint)",
+    border: "var(--accent)",
+    ink: "var(--ink)",
+    dot: "var(--accent)",
+  },
+  ATRASADA: {
+    bg: "var(--danger-tint)",
+    border: "var(--danger)",
+    ink: "var(--ink)",
+    dot: "var(--danger)",
+  },
+  NO_REALIZADA: {
+    bg: "var(--surface-sunken)",
+    border: "var(--border-control)",
+    ink: "var(--ink-secondary)",
+    dot: "var(--border-control)",
+  },
+  CANCELADA: {
+    bg: "var(--surface-sunken)",
+    border: "var(--hairline)",
+    ink: "var(--ink-tertiary)",
+    dot: "var(--border-control)",
+  },
 }
 
 export const WEEKDAY_HEADERS = ["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"]
@@ -23,9 +54,9 @@ export const WEEKDAY_HEADERS = ["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom
 export function hourLabel(h: number) {
   const whole = Math.floor(h)
   const mins = Math.round((h - whole) * 60)
-  const suffix = whole >= 12 ? "p. m." : "a. m."
+  const suffix = whole >= 12 ? "pm" : "am"
   const display = ((whole + 11) % 12) + 1
-  return mins ? `${display}:${String(mins).padStart(2, "0")} ${suffix}` : `${display} ${suffix}`
+  return mins ? `${display}:${String(mins).padStart(2, "0")}\u00a0${suffix}` : `${display}\u00a0${suffix}`
 }
 
 export function eventTop(startHour: number) {

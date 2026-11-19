@@ -57,6 +57,30 @@ def _plan(plan, user):
     }
 
 
+def _projection_sheet_url(user) -> str | None:
+    """Link de proyección del Excel BASE DE DATOS, si existe para este RTC."""
+    try:
+        from apps.parameters.services import get_setting
+
+        links = get_setting("programming.sheet_links") or {}
+    except Exception:
+        return None
+    if not isinstance(links, dict) or not links:
+        return None
+    full = f"{user.first_name} {user.last_name}".strip().upper()
+    email = (user.email or "").upper()
+    for name, url in links.items():
+        label = str(name).upper()
+        if not url:
+            continue
+        if full and (full in label or any(part and part in label for part in full.split() if len(part) > 3)):
+            return str(url)
+        local = email.split("@")[0].replace(".", " ")
+        if local and any(part and part in label for part in local.split() if len(part) > 3):
+            return str(url)
+    return None
+
+
 def _current(user, plan):
     year, week = (plan.iso_year, plan.iso_week) if plan else target_period()
     start, end = week_bounds(year, week)
@@ -70,6 +94,7 @@ def _current(user, plan):
         "week_end": end.isoformat(),
         "deadline_at": (plan.deadline_at if plan else deadline_for(year, week)).isoformat(),
         "plan": _plan(plan, user) if plan else None,
+        "projection_sheet_url": _projection_sheet_url(user),
     }
 
 

@@ -8,7 +8,18 @@ from apps.core.scoping import scope_queryset
 from apps.visits.evidence import store_photo
 from apps.visits.models import GpsCheck, GpsStatus
 from apps.visits.live import live_visits, parse_live_date
-from apps.visits.services import assign_visit, close_visit, mark_not_done, reassign_visit, register_now, review_check, start_visit, visit_for
+from apps.visits.services import (
+    assign_visit,
+    close_visit,
+    mark_not_done,
+    reassign_visit,
+    register_now,
+    reschedule_stats,
+    reschedule_visit,
+    review_check,
+    start_visit,
+    visit_for,
+)
 from apps.visits.suggestions import rtc_visit_load, visit_suggestions
 
 
@@ -53,6 +64,7 @@ def _visit(visit, check=None):
         for item in visit.evidence.filter(is_deleted=False)
     ]
     close = check or visit.gps_checks.filter(kind="CLOSE").order_by("-received_at").first()
+    when = timezone.localtime(visit.scheduled_start) if visit.scheduled_start else None
     return {
         "id": str(visit.id),
         "client_id": str(visit.client_id),
@@ -64,6 +76,7 @@ def _visit(visit, check=None):
         "agreements": visit.agreements,
         "contact_name_free": visit.contact_name_free,
         "not_done_reason": visit.not_done_reason,
+        "scheduled_start": when.isoformat() if when else None,
         "products": products,
         "photos": photos,
         "gps_check": _check(close) if close else None,
@@ -169,6 +182,36 @@ class VisitNowView(APIView):
         return Response(_visit(visit), status=201)
 
 
+class VisitRescheduleView(APIView):
+    permission_classes = [requires("visits.execute")]
+
+    def post(self, request, visit_id):
+        visit, event, stats = reschedule_visit(request.user, visit_id, request.data)
+        when = timezone.localtime(visit.scheduled_start)
+        return Response(
+            {
+                "id": str(visit.id),
+                "scheduled_start": when.isoformat(),
+                "reschedule_count": visit.reschedule_count,
+                "event_id": str(event.id),
+                "stats": stats,
+            }
+        )
+
+
+class VisitRescheduleStatsView(APIView):
+    permission_classes = [requires("visits.view")]
+
+    def get(self, request):
+        return Response(
+            reschedule_stats(
+                request.user,
+                rtc_id=request.query_params.get("rtc_id"),
+                month_key=request.query_params.get("month"),
+            )
+        )
+
+
 class EvidenceUploadView(APIView):
     permission_classes = [requires("visits.execute")]
     parser_classes = [MultiPartParser, FormParser]
@@ -223,6 +266,36 @@ class GpsCheckListView(APIView):
                 }
             )
         return Response({"results": rows, "pending": pending})
+
+
+class GpsCheckDetailView(APIView):
+    permission_classes = [requires("gps.review")]
+
+    def get(self, request, check_id):
+        check = (
+            GpsCheck.objects.filter(id=check_id, is_deleted=False, kind="CLOSE")
+            .select_related("visit__client", "visit__rtc", "visit__rtc__zone", "visit__site__municipality")
+            .first()
+        )
+        if check is None:
+            from apps.core.exceptions import NcError
+
+            raise NcError("resource.not_found", "No encontramos esa verificación.", status=404)
+        # Scope: must be visible via visit_for
+        visit_for(request.user, check.visit_id)
+        return Response(
+            {
+                **_check(check),
+                "visit_id": str(check.visit_id),
+                "client_name": check.visit.client.trade_name or check.visit.client.legal_name,
+                "rtc_name": f"{check.visit.rtc.first_name} {check.visit.rtc.last_name}".strip() or check.visit.rtc.email,
+                "municipality": check.visit.site.municipality.name if check.visit.site.municipality_id else "",
+                "site_name": check.visit.site.name,
+                "zone_name": check.visit.rtc.zone.name if check.visit.rtc.zone_id else "",
+                "received_at": check.received_at.isoformat(),
+                "photos": check.visit.evidence.filter(is_deleted=False).count(),
+            }
+        )
 
 
 class GpsReviewView(APIView):

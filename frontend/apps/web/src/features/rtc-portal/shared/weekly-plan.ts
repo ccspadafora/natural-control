@@ -17,6 +17,7 @@ type Plan = {
 }
 
 export type WeeklyPlanCurrent = {
+  projection_sheet_url?: string | null
   required: boolean
   reason: string
   reminder: string | null

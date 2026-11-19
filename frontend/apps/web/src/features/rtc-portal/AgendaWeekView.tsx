@@ -112,6 +112,8 @@ export function AgendaWeekView({ anchor = new Date() }: Props) {
                       top: eventTop(startHour),
                       height: eventHeight(1),
                       background: style.bg,
+                      borderColor: style.border,
+                      color: style.ink,
                     }}
                     title={`${e.client_name} · ${e.municipality}`}
                     onClick={() => navigate(`/portal/clientes/${e.client_id}`)}

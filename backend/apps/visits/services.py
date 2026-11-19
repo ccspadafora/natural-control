@@ -6,7 +6,7 @@ from django.db import transaction
 from django.utils import timezone
 from django.utils.dateparse import parse_date, parse_datetime
 
-from apps.accounts.models import User
+from apps.accounts.models import Scope, User
 from apps.audit.services import record
 from apps.catalog.models import Product
 from apps.catalog.services import resolve_unit_price
@@ -27,6 +27,7 @@ from apps.visits.models import (
     VisitPriority,
     VisitProduct,
     VisitReason,
+    VisitReschedule,
     VisitResult,
     VisitStatus,
 )
@@ -376,6 +377,138 @@ def mark_not_done(user, visit_id, data: dict) -> tuple[Visit, GpsCheck]:
     check = _finish(user, visit, data.get("gps"), VisitStatus.NO_REALIZADA)
     transaction.on_commit(lambda: publish_visit("visit.not_done", visit, check))
     return visit, check
+
+
+@transaction.atomic
+def reschedule_visit(user, visit_id, data: dict) -> tuple[Visit, VisitReschedule, dict]:
+    """Cambia fecha/hora de una visita abierta y registra historial + alerta mensual."""
+    if not user.has_perm_code("visits.execute") and not user.has_perm_code("visits.assign"):
+        raise NcError("auth.forbidden", "No tienes permiso para reprogramar visitas.", status=403)
+    visit_id = visit_for(user, visit_id).id
+    visit = Visit.objects.select_for_update().get(id=visit_id)
+    _open(visit)
+    if not visit.scheduled_start:
+        raise NcError("visit.invalid", "Esta visita no tiene horario para reprogramar.", status=400)
+    new_start = parse_datetime(str(data.get("scheduled_start") or ""))
+    if new_start is None:
+        raise NcError("visit.invalid", "Elige la nueva fecha y hora.", status=400)
+    if timezone.is_naive(new_start):
+        new_start = timezone.make_aware(new_start, timezone.get_current_timezone())
+    duration = int(data.get("duration_minutes") or 60)
+    if visit.scheduled_end and visit.scheduled_start:
+        duration = max(15, int((visit.scheduled_end - visit.scheduled_start).total_seconds() // 60))
+    new_end = new_start + timedelta(minutes=duration)
+    reason = (data.get("reason") or "").strip()
+    previous_start = visit.scheduled_start
+    previous_end = visit.scheduled_end
+    if previous_start == new_start:
+        raise NcError("visit.invalid", "La nueva hora debe ser distinta a la actual.", status=400)
+
+    overlap = (
+        Visit.objects.filter(
+            rtc=visit.rtc,
+            is_deleted=False,
+            status__in=[VisitStatus.PROGRAMADA, VisitStatus.EN_CURSO],
+            scheduled_start__lt=new_end,
+            scheduled_end__gt=new_start,
+        )
+        .exclude(id=visit.id)
+        .exists()
+    )
+    warning = "Se cruza con otra visita del mismo RTC." if overlap else None
+
+    local = timezone.localtime(new_start)
+    month_key = local.strftime("%Y-%m")
+    event = VisitReschedule.objects.create(
+        visit=visit,
+        rtc=visit.rtc,
+        changed_by=user,
+        previous_start=previous_start,
+        previous_end=previous_end,
+        new_start=new_start,
+        new_end=new_end,
+        reason=reason,
+        month_key=month_key,
+        created_by=user,
+        updated_by=user,
+    )
+    visit.scheduled_start = new_start
+    visit.scheduled_end = new_end
+    visit.reschedule_count = (visit.reschedule_count or 0) + 1
+    visit.updated_by = user
+    visit.save(update_fields=["scheduled_start", "scheduled_end", "reschedule_count", "updated_by", "updated_at"])
+    record(
+        user,
+        "visit.reschedule",
+        visit,
+        before={"scheduled_start": previous_start.isoformat()},
+        after={"scheduled_start": new_start.isoformat(), "reason": reason, "count": visit.reschedule_count},
+    )
+
+    month_count = VisitReschedule.objects.filter(rtc=visit.rtc, month_key=month_key, is_deleted=False).count()
+    threshold = int(get_setting("visits.reschedule_alert_monthly") or 5)
+    stats = {
+        "month_key": month_key,
+        "month_count": month_count,
+        "threshold": threshold,
+        "alert": month_count >= threshold,
+        "visit_reschedule_count": visit.reschedule_count,
+        "warning": warning,
+    }
+    return visit, event, stats
+
+
+def reschedule_stats(user, *, rtc_id: str | None = None, month_key: str | None = None) -> dict:
+    """Estadísticas de reagendamientos del mes para RTC propio o equipo (líder/gerencia)."""
+    now = timezone.localtime()
+    month_key = month_key or now.strftime("%Y-%m")
+    threshold = int(get_setting("visits.reschedule_alert_monthly") or 5)
+    qs = VisitReschedule.objects.filter(is_deleted=False, month_key=month_key).select_related("rtc", "visit__client")
+    scope = user.effective_scope
+    role_code = getattr(getattr(user, "role", None), "code", None)
+    if scope == Scope.OWN or (rtc_id is None and role_code == "RTC"):
+        qs = qs.filter(rtc=user)
+    elif rtc_id:
+        target = User.objects.filter(id=rtc_id, is_active=True).first()
+        if target is None:
+            raise NcError("resource.not_found", "No encontramos ese RTC.", status=404)
+        if scope != Scope.ALL and target.id != user.id:
+            visible = scope_queryset(Visit.objects.filter(rtc=target), user, owner_field="rtc").exists()
+            if not visible:
+                raise NcError("auth.forbidden", "No puedes ver reagendamientos de ese RTC.", status=403)
+        qs = qs.filter(rtc=target)
+    else:
+        visible_rtcs = (
+            scope_queryset(Visit.objects.all(), user, owner_field="rtc").values_list("rtc_id", flat=True).distinct()
+        )
+        qs = qs.filter(rtc_id__in=visible_rtcs)
+
+    by_rtc: dict[str, dict] = {}
+    for row in qs.order_by("-created_at"):
+        key = str(row.rtc_id)
+        bucket = by_rtc.setdefault(
+            key,
+            {
+                "rtc_id": key,
+                "rtc_name": f"{row.rtc.first_name} {row.rtc.last_name}".strip(),
+                "count": 0,
+                "alert": False,
+            },
+        )
+        bucket["count"] += 1
+    results = []
+    for bucket in by_rtc.values():
+        bucket["alert"] = bucket["count"] >= threshold
+        results.append(bucket)
+    results.sort(key=lambda item: (-item["count"], item["rtc_name"]))
+    mine = next((r for r in results if r["rtc_id"] == str(user.id)), None)
+    return {
+        "month_key": month_key,
+        "threshold": threshold,
+        "mine": mine or {"rtc_id": str(user.id), "rtc_name": user.first_name, "count": 0, "alert": False},
+        "results": results,
+        "alert_count": sum(1 for r in results if r["alert"]),
+    }
 
 
 def review_check(user, check_id, review_status: str, note: str) -> GpsCheck:

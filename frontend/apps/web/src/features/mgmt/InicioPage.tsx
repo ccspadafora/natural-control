@@ -1,4 +1,6 @@
-import { useMemo, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
+import { Link } from "react-router-dom"
+import { api } from "@nc/api"
 import type { SessionUser } from "@nc/domain"
 import { ComplianceMeter, Format, GpsCheck, PageHead, StatTile, Tabs } from "@nc/ui"
 import { LeaderPortalPage } from "../leader/LeaderPortalPage"
@@ -10,6 +12,13 @@ import { ZoneComplianceBars } from "./components/ZoneComplianceBars"
 import { attentionCases, moneyShort, pctLabel, zoneBarRows } from "./shared/metrics"
 import { mgmtScopeWord } from "./shared/scope"
 import { useLiveVisits, useTeamMetrics, useZoneMetrics } from "./shared/useMetrics"
+
+type RescheduleStats = {
+  month_key: string
+  threshold: number
+  alert_count: number
+  results: { rtc_id: string; rtc_name: string; count: number; alert: boolean }[]
+}
 
 const HOME_TABS = [
   { id: "mes", label: "A · Mes" },
@@ -23,10 +32,21 @@ export function MgmtInicioPage({ user, onLogout }: { user: SessionUser; onLogout
   const { data: team, error } = useTeamMetrics("mes")
   const { zones } = useZoneMetrics()
   const { data: live } = useLiveVisits()
+  const [rescheduleStats, setRescheduleStats] = useState<RescheduleStats | null>(null)
+
+  useEffect(() => {
+    api<RescheduleStats>("/api/v1/visits/reschedule-stats")
+      .then(setRescheduleStats)
+      .catch(() => setRescheduleStats(null))
+  }, [])
 
   const attention = useMemo(() => attentionCases(team?.attention), [team])
   const zoneRows = useMemo(() => zoneBarRows(zones), [zones])
   const totals = team?.totals
+  const alertedRtcs = useMemo(
+    () => (rescheduleStats?.results ?? []).filter((r) => r.alert).slice(0, 8),
+    [rescheduleStats],
+  )
 
   const liveFeed = useMemo(() => {
     const open = (live?.results ?? [])
@@ -63,7 +83,36 @@ export function MgmtInicioPage({ user, onLogout }: { user: SessionUser; onLogout
 
       {error ? <p className="nc-note">{error}</p> : null}
 
-      <div className="nc-portal-metrics">
+      {rescheduleStats && rescheduleStats.alert_count > 0 ? (
+        <div className="nc-portal-reschedule-alert" role="alert">
+          <div>
+            <strong>
+              {rescheduleStats.alert_count} RTC
+              {rescheduleStats.alert_count === 1 ? "" : "s"} por encima del umbral de reagendamientos
+            </strong>
+            <p className="nc-portal-muted" style={{ margin: "4px 0 0" }}>
+              Umbral parametrizable: {rescheduleStats.threshold} por mes
+              {user.permissions.includes("settings.edit") ? (
+                <>
+                  {" · "}
+                  <Link className="nc-text-link" to="/consola/parametros/visits.reschedule_alert_monthly">
+                    Ajustar en administración
+                  </Link>
+                </>
+              ) : null}
+            </p>
+            <ul className="nc-portal-reschedule-list">
+              {alertedRtcs.map((r) => (
+                <li key={r.rtc_id}>
+                  {r.rtc_name}: <strong>{r.count}</strong> reagendamientos
+                </li>
+              ))}
+            </ul>
+          </div>
+        </div>
+      ) : null}
+
+      <div className="nc-portal-metrics nc-portal-metrics-4">
         <StatTile
           label="Ventas del mes"
           value={totals ? Format.money(totals.sales) : "—"}
@@ -78,7 +127,15 @@ export function MgmtInicioPage({ user, onLogout }: { user: SessionUser; onLogout
           value={totals ? Format.number(totals.visits_done) : "—"}
           caption={totals && totals.visits_target > 0 ? `Meta del mes: ${Format.number(totals.visits_target)}` : "Mes en curso"}
         />
-        <StatTile label="Verificadas por GPS" value={pctLabel(totals?.gps_verified_pct)} caption="Geolocalización" />
+        <StatTile
+          label="Reagendamientos en alerta"
+          value={rescheduleStats ? Format.number(rescheduleStats.alert_count) : "—"}
+          caption={
+            rescheduleStats
+              ? `Umbral ${rescheduleStats.threshold}/mes · ${rescheduleStats.month_key}`
+              : "Cargando…"
+          }
+        />
       </div>
 
       {homeTab === "mes" ? (

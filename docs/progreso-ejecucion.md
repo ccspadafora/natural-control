@@ -1,6 +1,6 @@
 # Progreso de ejecución del plan
 
-Actualizado: 2026-11-18 (Funcional 100 % + Campo app-feel desplegado en EC2).
+Actualizado: 2026-11-18 (Mis números alineados + agenda con maps/acciones + reagendamientos con umbral admin; redeploy EC2).
 
 | Fase | Estado | Notas |
 |---|---|---|

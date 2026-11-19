@@ -88,7 +88,7 @@ export function ClientDetailPage({ user, onLogout }: { user: SessionUser; onLogo
         backLabel="Volver a la cartera"
         actions={
           <span className="nc-portal-actions">
-            <Link className="nc-btn nc-btn-secondary" to="/portal/programacion/nueva">
+            <Link className="nc-btn nc-btn-secondary" to={`/portal/programacion/nueva?client_id=${client.id}`}>
               Agendar visita
             </Link>
             <Button
@@ -96,7 +96,7 @@ export function ClientDetailPage({ user, onLogout }: { user: SessionUser; onLogo
               icon="pin"
               onClick={() => {
                 api<{ id: string }>("/api/v1/visits/now", { method: "POST", body: JSON.stringify({ client_id: client.id }) })
-                  .then(() => navigate("/portal/agenda"))
+                  .then((created) => navigate(`/portal/visitas/${created.id}`))
                   .catch((err) => setError(err instanceof Error ? err.message : "No se pudo registrar la visita"))
               }}
             >

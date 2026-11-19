@@ -6,6 +6,7 @@ import { Badge, Button, PageHead, TextField, TOAST } from "@nc/ui"
 import { PortalShell } from "./features/shell/PortalShell"
 import { useGeoPending } from "./features/leader/useGeoPending"
 import { useExport } from "./features/mgmt/shared/useMetrics"
+import { TablePager } from "./features/shared/TablePager"
 import { useToast } from "./features/shared/useToast"
 
 const ROLE_LABEL: Record<string, string> = {
@@ -173,22 +174,84 @@ type ClientRow = {
   owner_name: string
 }
 
+type ClientsResponse = {
+  results: ClientRow[]
+  count: number
+  page: number
+  page_size: number
+}
+
 export function PortfolioPage({ user, onLogout }: { user: SessionUser; onLogout: () => void }) {
   const location = useLocation()
   const notice = (location.state as { notice?: string } | null)?.notice || ""
   const [rows, setRows] = useState<ClientRow[]>([])
+  const [total, setTotal] = useState(0)
   const [live, setLive] = useState("")
   const [error, setError] = useState("")
+  const [loading, setLoading] = useState(true)
   const [q, setQ] = useState("")
+  const [qDebounced, setQDebounced] = useState("")
+  const [status, setStatus] = useState("")
+  const [ownerFilter, setOwnerFilter] = useState("")
+  const [owners, setOwners] = useState<{ id: string; name: string }[]>([])
+  const [page, setPage] = useState(1)
+  const pageSize = 25
   const exporter = useExport()
   const toast = useToast()
   const canMove = user.permissions.includes("clients.reassign")
   const canExport = user.permissions.includes("clients.export")
 
   useEffect(() => {
-    api<{ results: ClientRow[] }>("/api/v1/clients")
-      .then((data) => setRows(data.results))
-      .catch((err) => setError(err instanceof Error ? err.message : "No se pudo cargar la cartera"))
+    const t = window.setTimeout(() => setQDebounced(q.trim()), 280)
+    return () => window.clearTimeout(t)
+  }, [q])
+
+  useEffect(() => {
+    setPage(1)
+  }, [qDebounced, status, ownerFilter])
+
+  useEffect(() => {
+    api<{ results: { id: string; first_name: string; last_name: string }[] }>("/api/v1/users?role=RTC&active=1")
+      .then((data) =>
+        setOwners(
+          data.results.map((r) => ({
+            id: r.id,
+            name: `${r.first_name} ${r.last_name}`.trim() || r.id,
+          })),
+        ),
+      )
+      .catch(() => setOwners([]))
+  }, [])
+
+  useEffect(() => {
+    let alive = true
+    setLoading(true)
+    const params = new URLSearchParams({
+      page: String(page),
+      page_size: String(pageSize),
+    })
+    if (qDebounced) params.set("q", qDebounced)
+    if (status) params.set("status", status)
+    if (ownerFilter) params.set("owner", ownerFilter)
+    api<ClientsResponse>(`/api/v1/clients?${params}`)
+      .then((data) => {
+        if (!alive) return
+        setRows(data.results)
+        setTotal(data.count ?? data.results.length)
+        setError("")
+      })
+      .catch((err) => {
+        if (alive) setError(err instanceof Error ? err.message : "No se pudo cargar la cartera")
+      })
+      .finally(() => {
+        if (alive) setLoading(false)
+      })
+    return () => {
+      alive = false
+    }
+  }, [page, qDebounced, status, ownerFilter])
+
+  useEffect(() => {
     const stop = openStream((message) => {
       const data = message.data || {}
       if (message.type === "visit.closed" && typeof data.client_name === "string") {
@@ -197,13 +260,6 @@ export function PortfolioPage({ user, onLogout }: { user: SessionUser; onLogout:
     })
     return stop
   }, [])
-
-  const norm = (text: string) => text.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase()
-  const visible = rows.filter((c) => {
-    const needle = norm(q.trim())
-    if (!needle) return true
-    return [c.name, c.legal_name, c.municipality, c.owner_name].some((v) => norm(v || "").includes(needle))
-  })
 
   async function exportXls() {
     if (!canExport) {
@@ -215,13 +271,12 @@ export function PortfolioPage({ user, onLogout }: { user: SessionUser; onLogout:
     toast.show(ok ? TOAST.exportReady : TOAST.genericError, ok ? "success" : "danger")
   }
 
-  const count = visible.length
   return (
     <ConsoleShell
       user={user}
       onLogout={onLogout}
       title="Clientes"
-      lede={`${count} ${count === 1 ? "cliente" : "clientes"} en tu alcance`}
+      lede={`${total} ${total === 1 ? "cliente" : "clientes"} en tu alcance`}
       action={
         <span className="nc-portal-actions">
           <Button type="button" variant="secondary" disabled={exporter.busy} onClick={() => void exportXls()}>
@@ -241,13 +296,38 @@ export function PortfolioPage({ user, onLogout }: { user: SessionUser; onLogout:
       {notice ? <p className="nc-ok">{notice}</p> : null}
       {live ? <p className="nc-ok">{live}</p> : null}
       {error ? <p className="nc-note">{error}</p> : null}
-      <TextField
-        label="Buscar"
-        placeholder="Busca por nombre, comercial o municipio (sin tildes también)"
-        value={q}
-        onChange={(event) => setQ(event.target.value)}
-      />
-      <div className="nc-portal-card nc-table-wrap">
+      <div className="nc-portfolio-toolbar">
+        <TextField
+          label="Buscar"
+          placeholder="Busca por nombre, comercial o municipio (sin tildes también)"
+          value={q}
+          onChange={(event) => setQ(event.target.value)}
+        />
+        <label className="nc-field">
+          <span className="nc-field-label">Estado</span>
+          <select className="nc-input" value={status} onChange={(event) => setStatus(event.target.value)}>
+            <option value="">Todos</option>
+            {Object.entries(CLIENT_STATUS).map(([id, label]) => (
+              <option key={id} value={id}>
+                {label}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="nc-field">
+          <span className="nc-field-label">Comercial</span>
+          <select className="nc-input" value={ownerFilter} onChange={(event) => setOwnerFilter(event.target.value)}>
+            <option value="">Todos</option>
+            <option value="none">Sin comercial</option>
+            {owners.map((owner) => (
+              <option key={owner.id} value={owner.id}>
+                {owner.name}
+              </option>
+            ))}
+          </select>
+        </label>
+      </div>
+      <div className="nc-portal-card nc-table-wrap nc-portfolio-table">
         <table className="nc-table">
           <thead>
             <tr>
@@ -260,30 +340,51 @@ export function PortfolioPage({ user, onLogout }: { user: SessionUser; onLogout:
             </tr>
           </thead>
           <tbody>
-            {visible.length === 0 ? (
-              <tr><td className="nc-empty" colSpan={6}>{rows.length === 0 ? "Todavía no hay clientes en tu alcance." : "Ningún cliente coincide con la búsqueda."}</td></tr>
-            ) : visible.map((client) => (
-              <tr key={client.id}>
-                <td>
-                  <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-                    <span className="nc-portal-task-title">{client.name}</span>
-                    {client.is_new ? <Badge tone="accent">Nuevo</Badge> : null}
-                  </div>
-                  {client.legal_name ? <span className="nc-portal-mono">{client.legal_name}</span> : null}
+            {rows.length === 0 ? (
+              <tr>
+                <td className="nc-empty" colSpan={6}>
+                  {loading
+                    ? "Cargando clientes…"
+                    : total === 0 && !qDebounced && !status && !ownerFilter
+                      ? "Todavía no hay clientes en tu alcance."
+                      : "Ningún cliente coincide con la búsqueda."}
                 </td>
-                <td>{client.municipality || "Sin sede"}</td>
-                <td>{client.phone || "—"}</td>
-                <td>
-                  <Badge tone={client.status === "ACTIVO" ? "success" : client.status === "PROSPECTO" ? "accent" : client.status === "PERDIDO" ? "warning" : "neutral"}>
-                    {CLIENT_STATUS[client.status] || client.status}
-                  </Badge>
-                </td>
-                <td>{when(client.last_visit_at)}</td>
-                <td className="nc-portal-muted">{client.owner_name || "Sin comercial"}</td>
               </tr>
-            ))}
+            ) : (
+              rows.map((client) => (
+                <tr key={client.id}>
+                  <td>
+                    <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                      <span className="nc-portal-task-title">{client.name}</span>
+                      {client.is_new ? <Badge tone="accent">Nuevo</Badge> : null}
+                    </div>
+                    {client.legal_name ? <span className="nc-portal-mono">{client.legal_name}</span> : null}
+                  </td>
+                  <td>{client.municipality || "Sin sede"}</td>
+                  <td>{client.phone || "—"}</td>
+                  <td>
+                    <Badge
+                      tone={
+                        client.status === "ACTIVO"
+                          ? "success"
+                          : client.status === "PROSPECTO"
+                            ? "accent"
+                            : client.status === "PERDIDO"
+                              ? "warning"
+                              : "neutral"
+                      }
+                    >
+                      {CLIENT_STATUS[client.status] || client.status}
+                    </Badge>
+                  </td>
+                  <td>{when(client.last_visit_at)}</td>
+                  <td className="nc-portal-muted">{client.owner_name || "Sin comercial"}</td>
+                </tr>
+              ))
+            )}
           </tbody>
         </table>
+        <TablePager page={page} pageSize={pageSize} total={total} onPageChange={setPage} disabled={loading} />
       </div>
       {toast.node}
     </ConsoleShell>

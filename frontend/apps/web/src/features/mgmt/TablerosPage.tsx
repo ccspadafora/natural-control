@@ -3,6 +3,7 @@ import { api } from "@nc/api"
 import type { SessionUser } from "@nc/domain"
 import { Badge, Button, ComplianceMeter, Format, FilterPills, PageHead, Sheet, StatTile, Tabs } from "@nc/ui"
 import { LeaderPortalPage } from "../leader/LeaderPortalPage"
+import { CommercialCharts, ProductCharts } from "./components/BoardCharts"
 import { d1FromPct, d1ToneToBg, moneyShort, pctLabel, syncAgo, type Period, type TeamProduct, type TeamRtc } from "./shared/metrics"
 import { mgmtScopeWord } from "./shared/scope"
 import { useTeamMetrics } from "./shared/useMetrics"
@@ -13,6 +14,13 @@ const PERIODS: { id: Period; label: string }[] = [
   { id: "dia", label: "Día" },
   { id: "anio", label: "Año" },
 ]
+
+const PERIOD_CAPTION: Record<Period, string> = {
+  mes: "Mes en curso",
+  semana: "Semana en curso (lun–hoy)",
+  dia: "Solo hoy",
+  anio: "Año en curso",
+}
 
 const BOARD_TABS = [
   { id: "comercial", label: "Por comercial" },
@@ -53,7 +61,7 @@ function RtcSheet({ rtc, onClose }: { rtc: TeamRtc | null; onClose: () => void }
       </span>
       <ComplianceMeter label="Ventas · D1" value={rtc.sales} target={rtc.budget} expected={rtc.expected} />
       <div className="nc-portal-metrics">
-        <StatTile label="D2 proyectado al cierre" value={pctLabel(rtc.d2_pct)} caption="Promedio del equipo" />
+        <StatTile label="D2 proyectado al cierre" value={pctLabel(rtc.d2_pct)} caption="Sobre la meta del período" />
         <StatTile label="Cobertura de cartera" value={pctLabel(rtc.coverage_pct)} caption="Clientes visitados en 30 días" />
         <StatTile label="Efectividad de visitas" value={pctLabel(detail?.effectiveness_pct ?? null)} caption="Visitas con resultado comercial" />
         <StatTile label="Verificadas por GPS" value={pctLabel(rtc.verified_pct)} caption="Geolocalización" />
@@ -146,6 +154,13 @@ function ProductSheet({ product, onClose }: { product: TeamProduct | null; onClo
   )
 }
 
+function conversionTone(pct: number | null): "success" | "warning" | "danger" | "neutral" {
+  if (pct == null) return "neutral"
+  if (pct >= 40) return "success"
+  if (pct >= 15) return "warning"
+  return "danger"
+}
+
 export function TablerosPage({ user, onLogout }: { user: SessionUser; onLogout: () => void }) {
   const [period, setPeriod] = useState<Period>("mes")
   const [tab, setTab] = useState("comercial")
@@ -171,11 +186,16 @@ export function TablerosPage({ user, onLogout }: { user: SessionUser; onLogout: 
     [rtcs],
   )
 
+  const periodDays = data?.days_in_month ?? 30
+  const periodDay = data?.day ?? 1
+
   return (
     <LeaderPortalPage user={user} onLogout={onLogout}>
       <header className="nc-portal-page-head">
         <div className="nc-portal-hero">
-          <span className="nc-portal-eyebrow">{mgmtScopeWord(user)}</span>
+          <span className="nc-portal-eyebrow">
+            {mgmtScopeWord(user)} · {PERIOD_CAPTION[period]}
+          </span>
           <PageHead title="Tableros" />
         </div>
         <FilterPills items={PERIODS} value={period} onChange={(id) => setPeriod(id as Period)} />
@@ -186,63 +206,87 @@ export function TablerosPage({ user, onLogout }: { user: SessionUser; onLogout: 
       {error ? <p className="nc-note">{error}</p> : null}
       {loading && !data ? <p className="nc-portal-muted">Cargando tableros…</p> : null}
 
+      {data ? (
+        <div className="nc-portal-metrics">
+          <StatTile label="Ventas del período" value={moneyShort(data.totals.sales)} caption={PERIOD_CAPTION[period]} />
+          <StatTile
+            label="Meta prorrateada"
+            value={moneyShort(data.totals.budget)}
+            caption={`Esperado a hoy ${moneyShort(data.totals.expected)}`}
+          />
+          <StatTile
+            label="Visitas"
+            value={`${data.totals.visits_done}${data.totals.visits_target ? ` / ${data.totals.visits_target}` : ""}`}
+            caption="Realizadas vs meta del período"
+          />
+          <StatTile label="GPS verificado" value={pctLabel(data.totals.gps_verified_pct)} caption="Cierres con GPS ok" />
+        </div>
+      ) : null}
+
       {tab === "comercial" ? (
-        <div className="nc-portal-card nc-table-wrap nc-mgmt-table-click">
-          <table className="nc-table">
-            <thead>
-              <tr>
-                <th>RTC</th>
-                <th className="nc-mgmt-num">Ventas</th>
-                <th className="nc-mgmt-num">D1 a la fecha</th>
-                <th className="nc-mgmt-num">D2 proyectado</th>
-                <th>Visitas</th>
-                <th className="nc-mgmt-num">Verificadas</th>
-                <th className="nc-mgmt-num">Cobertura</th>
-                <th>Última sincronización</th>
-              </tr>
-            </thead>
-            <tbody>
-              {rtcs.length === 0 ? (
+        <div className="nc-mgmt-board-stack">
+          <CommercialCharts rtcs={rtcs} />
+          <div className="nc-portal-card nc-table-wrap nc-mgmt-table-click">
+            <div className="nc-mgmt-board-table-head">
+              <h2 className="nc-portal-card-title">Detalle por comercial</h2>
+              <p className="nc-portal-muted">Haz clic en una fila para abrir el desglose.</p>
+            </div>
+            <table className="nc-table">
+              <thead>
                 <tr>
-                  <td colSpan={8} className="nc-empty">
-                    No hay comerciales en tu alcance.
-                  </td>
+                  <th>RTC</th>
+                  <th className="nc-mgmt-num">Ventas</th>
+                  <th className="nc-mgmt-num">D1 a la fecha</th>
+                  <th className="nc-mgmt-num">D2 proyectado</th>
+                  <th>Visitas</th>
+                  <th className="nc-mgmt-num">Verificadas</th>
+                  <th className="nc-mgmt-num">Cobertura</th>
+                  <th>Última sincronización</th>
                 </tr>
-              ) : (
-                rtcs.map((r) => {
-                  const d1 = d1FromPct(r.d1_pct)
-                  const onPace = r.visits_target > 0 && r.visits_done >= r.visits_target * (data!.day / data!.days_in_month)
-                  return (
-                    <tr key={r.id} tabIndex={0} onClick={() => setRtcId(r.id)} onKeyDown={(e) => e.key === "Enter" && setRtcId(r.id)}>
-                      <td>
-                        <div>{r.name}</div>
-                        <div className="nc-portal-muted">{r.zone || "Sin zona"}</div>
-                      </td>
-                      <td className="nc-mgmt-num">{Format.money(r.sales)}</td>
-                      <td className="nc-mgmt-num">
-                        <span className="nc-mgmt-d1-pill" style={{ background: d1ToneToBg(d1.tone) }}>
-                          {d1.label}
-                        </span>
-                      </td>
-                      <td className="nc-mgmt-num">{pctLabel(r.d2_pct)}</td>
-                      <td>
-                        <span>
-                          {r.visits_done}
-                          {r.visits_target > 0 ? ` / ${r.visits_target}` : ""}
-                        </span>{" "}
-                        <Badge tone={r.visits_target === 0 ? "neutral" : onPace ? "success" : "warning"}>
-                          {r.visits_target === 0 ? "Sin meta" : onPace ? "Al día" : "Atrasada"}
-                        </Badge>
-                      </td>
-                      <td className="nc-mgmt-num">{pctLabel(r.verified_pct)}</td>
-                      <td className="nc-mgmt-num">{pctLabel(r.coverage_pct)}</td>
-                      <td className="nc-portal-muted">{syncAgo(r.last_sync_at)}</td>
-                    </tr>
-                  )
-                })
-              )}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {rtcs.length === 0 ? (
+                  <tr>
+                    <td colSpan={8} className="nc-empty">
+                      No hay comerciales en tu alcance.
+                    </td>
+                  </tr>
+                ) : (
+                  rtcs.map((r) => {
+                    const d1 = d1FromPct(r.d1_pct)
+                    const onPace = r.visits_target > 0 && r.visits_done >= r.visits_target * (periodDay / periodDays)
+                    return (
+                      <tr key={r.id} tabIndex={0} onClick={() => setRtcId(r.id)} onKeyDown={(e) => e.key === "Enter" && setRtcId(r.id)}>
+                        <td>
+                          <div>{r.name}</div>
+                          <div className="nc-portal-muted">{r.zone || "Sin zona"}</div>
+                        </td>
+                        <td className="nc-mgmt-num">{Format.money(r.sales)}</td>
+                        <td className="nc-mgmt-num">
+                          <span className="nc-mgmt-d1-pill" style={{ background: d1ToneToBg(d1.tone) }}>
+                            {d1.label}
+                          </span>
+                        </td>
+                        <td className="nc-mgmt-num">{pctLabel(r.d2_pct)}</td>
+                        <td>
+                          <span>
+                            {r.visits_done}
+                            {r.visits_target > 0 ? ` / ${r.visits_target}` : ""}
+                          </span>{" "}
+                          <Badge tone={r.visits_target === 0 ? "neutral" : onPace ? "success" : "warning"}>
+                            {r.visits_target === 0 ? "Sin meta" : onPace ? "Al día" : "Atrasada"}
+                          </Badge>
+                        </td>
+                        <td className="nc-mgmt-num">{pctLabel(r.verified_pct)}</td>
+                        <td className="nc-mgmt-num">{pctLabel(r.coverage_pct)}</td>
+                        <td className="nc-portal-muted">{syncAgo(r.last_sync_at)}</td>
+                      </tr>
+                    )
+                  })
+                )}
+              </tbody>
+            </table>
+          </div>
         </div>
       ) : null}
 
@@ -294,35 +338,54 @@ export function TablerosPage({ user, onLogout }: { user: SessionUser; onLogout: 
       ) : null}
 
       {tab === "producto" ? (
-        <div className="nc-mgmt-prod-grid">
-          {products.length === 0 ? <p className="nc-portal-muted">Aún no hay productos con potencial registrado.</p> : null}
-          {products.map((p) => (
-            <div
-              key={p.id}
-              className="nc-portal-card nc-mgmt-prod-card"
-              role="button"
-              tabIndex={0}
-              onClick={() => setProductId(p.id)}
-              onKeyDown={(e) => e.key === "Enter" && setProductId(p.id)}
-            >
-              <span className="nc-leader-link-title">{p.name}</span>
-              <span className="nc-portal-muted">{[p.category, p.active_ingredient].filter(Boolean).join(" · ") || "—"}</span>
-              <div className="nc-mgmt-detail-grid">
-                <div>
-                  <span className="nc-portal-muted">Potencial</span>
-                  <span>{moneyShort(p.potential)}</span>
+        <div className="nc-mgmt-board-stack">
+          <ProductCharts products={products} />
+          <div className="nc-mgmt-prod-grid">
+            {products.length === 0 ? <p className="nc-portal-muted">Aún no hay productos con potencial en este período.</p> : null}
+            {products.map((p) => {
+              const conv = p.conversion ?? 0
+              const max = Math.max(p.potential, p.concretado, 1)
+              return (
+                <div
+                  key={p.id}
+                  className="nc-portal-card nc-mgmt-prod-card"
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => setProductId(p.id)}
+                  onKeyDown={(e) => e.key === "Enter" && setProductId(p.id)}
+                >
+                  <div className="nc-mgmt-prod-card-head">
+                    <span className="nc-leader-link-title">{p.name}</span>
+                    <Badge tone={conversionTone(p.conversion)}>{pctLabel(p.conversion)}</Badge>
+                  </div>
+                  <span className="nc-portal-muted">{[p.category, p.active_ingredient].filter(Boolean).join(" · ") || "—"}</span>
+                  <div className="nc-mgmt-prod-bars" aria-hidden>
+                    <div className="nc-mgmt-prod-bar-row">
+                      <span>Potencial</span>
+                      <strong>{moneyShort(p.potential)}</strong>
+                    </div>
+                    <div className="nc-mgmt-prod-track">
+                      <span className="nc-mgmt-prod-fill is-potential" style={{ width: `${(p.potential / max) * 100}%` }} />
+                    </div>
+                    <div className="nc-mgmt-prod-bar-row">
+                      <span>Concretado</span>
+                      <strong>{moneyShort(p.concretado)}</strong>
+                    </div>
+                    <div className="nc-mgmt-prod-track">
+                      <span className="nc-mgmt-prod-fill is-sold" style={{ width: `${(p.concretado / max) * 100}%` }} />
+                    </div>
+                    <div className="nc-mgmt-prod-bar-row">
+                      <span>Conversión</span>
+                      <strong>{pctLabel(p.conversion)}</strong>
+                    </div>
+                    <div className="nc-mgmt-prod-track">
+                      <span className="nc-mgmt-prod-fill is-conv" style={{ width: `${Math.min(100, conv)}%` }} />
+                    </div>
+                  </div>
                 </div>
-                <div>
-                  <span className="nc-portal-muted">Concretado</span>
-                  <span>{moneyShort(p.concretado)}</span>
-                </div>
-                <div>
-                  <span className="nc-portal-muted">Conversión</span>
-                  <span>{pctLabel(p.conversion)}</span>
-                </div>
-              </div>
-            </div>
-          ))}
+              )
+            })}
+          </div>
         </div>
       ) : null}
       <RtcSheet rtc={selectedRtc} onClose={() => setRtcId(null)} />

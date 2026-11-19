@@ -141,6 +141,11 @@ def test_close_and_review_discrepancy(api):
     listing = api.get("/api/v1/gps-checks")
     assert listing.status_code == 200
     row = next(item for item in listing.data["results"] if item["client_name"] == "Insumos del Oriente")
+    detail = api.get(f"/api/v1/gps-checks/{row['id']}")
+    assert detail.status_code == 200
+    assert detail.data["id"] == row["id"]
+    assert detail.data["client_name"] == "Insumos del Oriente"
+
     reviewed = api.post(
         f"/api/v1/gps-checks/{row['id']}/review",
         {"review_status": "JUSTIFICADA", "note": "Estaba en la vía de acceso."},

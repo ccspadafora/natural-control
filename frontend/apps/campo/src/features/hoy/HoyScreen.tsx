@@ -17,6 +17,8 @@ type VisitRow = {
   reason: string
   scheduled_start: string | null
   late: boolean
+  latitude?: number | null
+  longitude?: number | null
 }
 
 const DONE = new Set(["REALIZADA", "NO_REALIZADA"])
@@ -176,19 +178,36 @@ export function HoyScreen() {
             </p>
           </div>
         ) : null}
-        {rows.map((visit) => (
-          <VisitCard
-            key={visit.id}
-            client={visit.client_name}
-            site={visit.site}
-            municipality={visit.municipality}
-            time={visitClock(visit.scheduled_start)}
-            duration={visit.scheduled_start ? "60 min" : undefined}
-            status={visitCardStatus(visit)}
-            reason={visit.reason || undefined}
-            onClick={() => navigate(`/visitas/${visit.id}`)}
-          />
-        ))}
+        {rows.map((visit) => {
+          const open = visit.status === "PROGRAMADA" || visit.status === "EN_CURSO" || visit.late
+          const maps =
+            visit.latitude != null && visit.longitude != null
+              ? `https://www.google.com/maps/dir/?api=1&destination=${visit.latitude},${visit.longitude}`
+              : [visit.site, visit.municipality].filter(Boolean).length
+                ? `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent([visit.site, visit.municipality].filter(Boolean).join(", "))}`
+                : null
+          return (
+            <VisitCard
+              key={visit.id}
+              client={visit.client_name}
+              site={visit.site}
+              municipality={visit.municipality}
+              time={visitClock(visit.scheduled_start)}
+              duration={visit.scheduled_start ? "60 min" : undefined}
+              status={visitCardStatus(visit)}
+              reason={visit.reason || undefined}
+              mapsUrl={maps}
+              onClick={() => navigate(`/visitas/${visit.id}`)}
+              actions={
+                open ? (
+                  <Button variant="primary" type="button" onClick={() => navigate(`/visitas/${visit.id}`)}>
+                    Abrir visita
+                  </Button>
+                ) : null
+              }
+            />
+          )
+        })}
 
         <Button variant="outline" icon="plus" block onClick={() => navigate("/clientes")}>
           Registrar visita sin agendar

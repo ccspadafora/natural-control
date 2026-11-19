@@ -6,7 +6,11 @@ export function campoDayLabel(date = new Date()) {
 
 export function visitClock(iso: string | null) {
   if (!iso) return "—"
-  return new Intl.DateTimeFormat("es-CO", { hour: "numeric", minute: "2-digit", timeZone: TZ }).format(new Date(iso))
+  return new Intl.DateTimeFormat("es-CO", { hour: "numeric", minute: "2-digit", timeZone: TZ })
+    .format(new Date(iso))
+    .replace(/\s+/g, "\u00a0")
+    .replace(/a\.\u00a0m\./gi, "a.m.")
+    .replace(/p\.\u00a0m\./gi, "p.m.")
 }
 
 export function visitAgo(iso: string | null) {

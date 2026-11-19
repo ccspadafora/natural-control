@@ -45,6 +45,23 @@ def _period_start(today: date, period: str) -> date:
     return date(today.year, today.month, 1)
 
 
+def _period_progress(today: date, period: str) -> tuple[int, int]:
+    """(día del período, días totales del período) para D1/prorrateo de meta."""
+    if period == "dia":
+        return 1, 1
+    if period == "semana":
+        return today.weekday() + 1, 7
+    if period == "anio":
+        days = 366 if (today.year % 4 == 0 and (today.year % 100 != 0 or today.year % 400 == 0)) else 365
+        return today.timetuple().tm_yday, days
+    days_in_month = monthrange(today.year, today.month)[1]
+    return today.day, days_in_month
+
+
+def _month_start(today: date) -> date:
+    return date(today.year, today.month, 1)
+
+
 def _snapshot_for(user_id, period_start: date) -> ScorecardSnapshot | None:
     return (
         ScorecardSnapshot.objects.filter(user_id=user_id, period_start=period_start, is_deleted=False).first()
@@ -63,10 +80,23 @@ def _goal_for(user_id, period_start: date) -> Goal | None:
     )
 
 
-def _d1_pct(sales: float, budget: float, day: int, days_in_month: int) -> float | None:
-    if budget <= 0 or days_in_month <= 0:
+def _scale_monthly(amount: float, period: str, days_in_month: int) -> float:
+    """Prorratea meta mensual al período seleccionado."""
+    if amount <= 0:
+        return 0.0
+    if period == "dia":
+        return amount / max(days_in_month, 1)
+    if period == "semana":
+        return amount * (7 / max(days_in_month, 1))
+    if period == "anio":
+        return amount * 12
+    return amount
+
+
+def _d1_pct(sales: float, budget: float, day: int, days_in_period: int) -> float | None:
+    if budget <= 0 or days_in_period <= 0:
         return None
-    expected = budget * (day / days_in_month)
+    expected = budget * (day / days_in_period)
     if expected <= 0:
         return None
     return round(100.0 * sales / expected, 1)
@@ -83,16 +113,22 @@ def _tone(d1: float | None) -> str:
 
 
 def team_metrics(user, period: str = "mes") -> dict:
+    from apps.visits.models import ProductKind, VisitProduct
+
     today = business_today()
     now = business_now()
+    period = period if period in {"mes", "semana", "dia", "anio"} else "mes"
     period_start = _period_start(today, period)
+    month_start = _month_start(today)
     days_in_month = monthrange(today.year, today.month)[1]
-    day = today.day
+    day, days_in_period = _period_progress(today, period)
     rtcs = list(scoped_rtcs(user))
     rtc_ids = [r.id for r in rtcs]
 
     day_start = datetime(today.year, today.month, today.day, tzinfo=BOGOTA)
     day_end = day_start + timedelta(days=1)
+    period_start_dt = datetime(period_start.year, period_start.month, period_start.day, tzinfo=BOGOTA)
+    period_end_dt = day_end
 
     visits_today = Visit.objects.filter(
         rtc_id__in=rtc_ids, is_deleted=False, scheduled_start__gte=day_start, scheduled_start__lt=day_end
@@ -108,6 +144,67 @@ def team_metrics(user, period: str = "mes") -> dict:
         )
     }
 
+    in_period = Q(visit__completed_at__gte=period_start_dt, visit__completed_at__lt=period_end_dt) | Q(
+        visit__completed_at__isnull=True,
+        visit__scheduled_start__gte=period_start_dt,
+        visit__scheduled_start__lt=period_end_dt,
+    )
+    visit_in_period = Q(completed_at__gte=period_start_dt, completed_at__lt=period_end_dt) | Q(
+        completed_at__isnull=True,
+        scheduled_start__gte=period_start_dt,
+        scheduled_start__lt=period_end_dt,
+    )
+
+    # Ventas y visitas reales del período (para que Mes/Semana/Día/Año cambien cifras).
+    sales_by_rtc = {
+        row["visit__rtc_id"]: float(row["total"] or 0)
+        for row in VisitProduct.objects.filter(
+            visit__rtc_id__in=rtc_ids,
+            visit__is_deleted=False,
+            is_deleted=False,
+            kind=ProductKind.CONCRETADO,
+        )
+        .filter(in_period)
+        .values("visit__rtc_id")
+        .annotate(total=Sum("total_value"))
+    }
+    pot_by_rtc = {
+        row["visit__rtc_id"]: float(row["total"] or 0)
+        for row in VisitProduct.objects.filter(
+            visit__rtc_id__in=rtc_ids,
+            visit__is_deleted=False,
+            is_deleted=False,
+            kind=ProductKind.POTENCIAL,
+        )
+        .filter(in_period)
+        .values("visit__rtc_id")
+        .annotate(total=Sum("total_value"))
+    }
+    visits_by_rtc = {
+        row["rtc_id"]: int(row["done"] or 0)
+        for row in Visit.objects.filter(
+            rtc_id__in=rtc_ids,
+            is_deleted=False,
+            status=VisitStatus.REALIZADA,
+        )
+        .filter(visit_in_period)
+        .values("rtc_id")
+        .annotate(done=Count("id"))
+    }
+    gps_by_rtc = {
+        row["visit__rtc_id"]: row
+        for row in GpsCheck.objects.filter(
+            is_deleted=False,
+            kind="CLOSE",
+            visit__rtc_id__in=rtc_ids,
+            visit__is_deleted=False,
+            received_at__gte=period_start_dt,
+            received_at__lt=period_end_dt,
+        )
+        .values("visit__rtc_id")
+        .annotate(total=Count("id"), verified=Count("id", filter=Q(status="VERIFICADA")))
+    }
+
     rows = []
     total_sales = 0.0
     total_budget = 0.0
@@ -118,25 +215,39 @@ def team_metrics(user, period: str = "mes") -> dict:
     pot_acc = 0.0
 
     for rtc in rtcs:
-        snap = _snapshot_for(rtc.id, period_start)
-        goal = _goal_for(rtc.id, period_start)
+        snap = _snapshot_for(rtc.id, month_start)
+        goal = _goal_for(rtc.id, month_start)
         attrs = (snap.attributes if snap else {}) or {}
-        sales = float(attrs.get("sales") or 0)
-        budget = float(goal.sales_budget) if goal else 0.0
-        visits_done = int(attrs.get("visits") or 0)
-        visits_target = int(goal.visits_target) if goal else 0
-        expected = budget * (day / days_in_month) if budget and days_in_month else 0.0
-        d1 = _d1_pct(sales, budget, day, days_in_month)
+        monthly_budget = float(goal.sales_budget) if goal else 0.0
+        monthly_visits_target = int(goal.visits_target) if goal else 0
+        budget = _scale_monthly(monthly_budget, period, days_in_month)
+        visits_target = int(round(_scale_monthly(float(monthly_visits_target), period, days_in_month)))
+        # Período mes: preferir snapshot si existe; si no, datos vivos.
+        if period == "mes" and snap is not None:
+            sales = float(attrs.get("sales") or sales_by_rtc.get(rtc.id) or 0)
+            visits_done = int(attrs.get("visits") or visits_by_rtc.get(rtc.id) or 0)
+            verified_pct = attrs.get("verif")
+            coverage_pct = attrs.get("cob")
+            pot_acc += float(attrs.get("pot") or pot_by_rtc.get(rtc.id) or 0)
+        else:
+            sales = float(sales_by_rtc.get(rtc.id) or 0)
+            visits_done = int(visits_by_rtc.get(rtc.id) or 0)
+            gps_row = gps_by_rtc.get(rtc.id) or {}
+            gps_total = int(gps_row.get("total") or 0)
+            verified_pct = round(100.0 * int(gps_row.get("verified") or 0) / gps_total, 1) if gps_total else None
+            coverage_pct = attrs.get("cob")
+            pot_acc += float(pot_by_rtc.get(rtc.id) or 0)
+        expected = budget * (day / days_in_period) if budget and days_in_period else 0.0
+        d1 = _d1_pct(sales, budget, day, days_in_period)
         d2 = round(100.0 * sales / budget, 1) if budget else None
         day_row = day_counts.get(rtc.id) or {}
         total_sales += sales
         total_budget += budget
         total_visits_done += visits_done
         total_visits_target += visits_target
-        if attrs.get("verif") is not None:
-            verified_acc += float(attrs["verif"])
+        if verified_pct is not None:
+            verified_acc += float(verified_pct)
             verified_n += 1
-        pot_acc += float(attrs.get("pot") or 0)
         rows.append(
             {
                 "id": str(rtc.id),
@@ -150,8 +261,8 @@ def team_metrics(user, period: str = "mes") -> dict:
                 "d2_pct": d2,
                 "visits_done": visits_done,
                 "visits_target": visits_target,
-                "verified_pct": attrs.get("verif"),
-                "coverage_pct": attrs.get("cob"),
+                "verified_pct": verified_pct,
+                "coverage_pct": coverage_pct,
                 "last_sync_at": rtc.last_sync_at.isoformat() if rtc.last_sync_at else None,
                 "gen": snap.gen if snap else None,
                 "day": {
@@ -199,11 +310,13 @@ def team_metrics(user, period: str = "mes") -> dict:
     )
     clients_stale = clients_in_scope.exclude(id__in=visited_ids).count()
 
-    # Productos (potencial / concretado del mes desde VisitProduct vía atributos stub + líneas)
-    from apps.visits.models import ProductKind, VisitProduct
-
     product_rows = (
-        VisitProduct.objects.filter(visit__rtc_id__in=rtc_ids, is_deleted=False, visit__is_deleted=False)
+        VisitProduct.objects.filter(
+            visit__rtc_id__in=rtc_ids,
+            is_deleted=False,
+            visit__is_deleted=False,
+        )
+        .filter(in_period)
         .values("product_id", "product__name", "product__category__name", "product__active_ingredient")
         .annotate(
             potential=Sum("total_value", filter=Q(kind=ProductKind.POTENCIAL)),
@@ -223,19 +336,18 @@ def team_metrics(user, period: str = "mes") -> dict:
                 "active_ingredient": row["product__active_ingredient"] or "",
                 "potential": pot,
                 "concretado": conc,
-                "conversion": round(100.0 * conc / pot, 1) if pot else None,
+                "conversion": round(100.0 * conc / pot, 1) if pot else (100.0 if conc else None),
             }
         )
 
-    expected_total = total_budget * (day / days_in_month) if total_budget and days_in_month else 0.0
-    # Probable ≈ 62 % del potencial (misma heurística del prototipo)
+    expected_total = total_budget * (day / days_in_period) if total_budget and days_in_period else 0.0
     forecast_probable = pot_acc * 0.62
 
     return {
         "period": period,
         "period_start": period_start.isoformat(),
         "day": day,
-        "days_in_month": days_in_month,
+        "days_in_month": days_in_period,
         "totals": {
             "sales": total_sales,
             "budget": total_budget,

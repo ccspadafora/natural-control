@@ -80,20 +80,51 @@ export type ForecastLine = { id: string; name: string; optimistic: number; proba
 
 export type ForecastRtc = ForecastLine & { zone: string; hit_rate: number | null }
 
+export type ForecastGap = {
+  budget: number
+  sales: number
+  falta: number
+  ticket_avg: number
+  close_rate: number
+  visits_needed: number
+  days_left: number
+}
+
 export type Forecast = {
   totals: { optimistic: number; probable: number; committed: number }
   by_month: { month: string; label: string; corto: number; mediano: number; largo: number }[]
   by_rtc: ForecastRtc[]
   by_product: ForecastLine[]
-  gap: {
-    budget: number
-    sales: number
-    falta: number
-    ticket_avg: number
-    close_rate: number
-    visits_needed: number
-    days_left: number
-  } | null
+  gap: ForecastGap | null
+}
+
+export type ForecastDeal = {
+  id: string
+  product_name: string
+  client_id: string
+  client_name: string
+  municipality: string
+  total_value: number
+  probable_value: number
+  horizon: string
+  probability: number | null
+  expected_date: string | null
+  visit_id: string
+  visit_result: string
+  visit_date: string | null
+  rtc_name: string
+  status: string
+}
+
+export type ForecastDeals = {
+  deals: ForecastDeal[]
+  summary: {
+    count: number
+    by_horizon: { corto: number; mediano: number; largo: number; sin_horizonte: number }
+    totals: { optimistic: number; probable: number; committed: number }
+    gap: ForecastGap | null
+    tips: string[]
+  }
 }
 
 export type LiveGps = { status: string; distance_m: number | null; review_status: string }
@@ -101,6 +132,7 @@ export type LiveGps = { status: string; distance_m: number | null; review_status
 export type LiveVisit = {
   id: string
   scheduled_start: string | null
+  client_id?: string
   client_name: string
   site: string
   municipality: string
@@ -116,6 +148,8 @@ export type LiveVisit = {
   concretado: number
   potencial: number
   photos: number
+  late?: boolean
+  late_minutes?: number
 }
 
 export type LiveVisits = {
@@ -123,7 +157,15 @@ export type LiveVisits = {
   count: number
   page: number
   page_size: number
-  summary: { total: number; en_curso: number; realizadas: number; no_realizadas: number; verificadas_pct: number | null }
+  summary: {
+    total: number
+    en_curso: number
+    realizadas: number
+    no_realizadas: number
+    atrasadas?: number
+    programadas?: number
+    verificadas_pct: number | null
+  }
 }
 
 export type AttentionCase = {
@@ -140,7 +182,7 @@ export function attentionCases(attention: TeamAttention | undefined): AttentionC
   const all: AttentionCase[] = [
     { id: "gps", n: attention.gps_pending, title: "discrepancias GPS sin revisar", sub: "Geolocalización · prioriza las de hoy", icon: "crosshair", to: "/consola/geo" },
     { id: "plan", n: attention.plans_pending, title: "programaciones pendientes de aprobar", sub: "Semana próxima · vence pronto", icon: "calendar", to: "/consola/programacion" },
-    { id: "vis", n: attention.visits_not_started, title: "visitas programadas sin iniciar", sub: "Hoy · revisa en Visitas en vivo", icon: "pin", to: "/consola/visitas" },
+    { id: "vis", n: attention.visits_not_started, title: "visitas programadas sin iniciar", sub: "Hoy · centro de mando", icon: "pin", to: "/consola/visitas?filtro=atrasadas" },
     { id: "cob", n: attention.clients_stale_30d, title: "clientes sin visita en 30 días", sub: "Cobertura · últimos 30 días", icon: "users", to: "/consola/tableros" },
   ]
   return all.filter((a) => a.n > 0)

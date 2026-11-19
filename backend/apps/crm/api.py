@@ -1,3 +1,4 @@
+from django.db.models import Max, Prefetch, Sum
 from django.utils import timezone
 
 from rest_framework.response import Response
@@ -6,7 +7,7 @@ from rest_framework.views import APIView
 from apps.accounts.permissions import requires
 from apps.catalog.models import Product
 from apps.catalog.services import resolve_unit_price
-from apps.crm.models import ClientType, CommercialStatus, CropType
+from apps.crm.models import ClientType, CommercialStatus, CropType, Site
 from apps.crm.selectors import client_for, clients_for, display_name, is_new, primary_site
 from apps.crm.services import create_client
 from apps.geo.models import Municipality
@@ -35,19 +36,24 @@ def _site_payload(site):
     }
 
 
-def _client_row(client):
-    site = primary_site(client)
-    last = (
-        Visit.objects.filter(client=client, is_deleted=False, status=VisitStatus.REALIZADA)
-        .order_by("-completed_at")
-        .values_list("completed_at", flat=True)
-        .first()
-    )
+def _client_row(client, *, last=None, area=None, site=None):
+    site = site if site is not None else primary_site(client)
+    if last is None:
+        last = (
+            Visit.objects.filter(client=client, is_deleted=False, status=VisitStatus.REALIZADA)
+            .order_by("-completed_at")
+            .values_list("completed_at", flat=True)
+            .first()
+        )
+    if area is None:
+        area = None
+        for row in client.sites.filter(is_deleted=False).exclude(total_area_ha=None).values_list("total_area_ha", flat=True):
+            area = (area or 0) + float(row)
     return {
         "id": str(client.id),
         "name": display_name(client),
         "legal_name": client.legal_name,
-        "municipality": site.municipality.name if site else "",
+        "municipality": site.municipality.name if site and site.municipality_id else "",
         "phone": client.phone,
         "status": client.commercial_status,
         "is_new": is_new(client),
@@ -55,15 +61,88 @@ def _client_row(client):
         "owner_id": str(client.owner_id) if client.owner_id else None,
         "owner_name": f"{client.owner.first_name} {client.owner.last_name}".strip() if client.owner_id else "",
         "zone_name": client.zone.name if client.zone_id else "",
+        "client_type": client.client_type.name if client.client_type_id else "",
+        "segment": client.segment or "",
+        "total_area_ha": area,
     }
+
+
+def _client_rows(clients):
+    """Serializa clientes evitando N+1 en última visita y área."""
+    clients = list(clients)
+    if not clients:
+        return []
+    ids = [c.id for c in clients]
+    last_map = {
+        row["client_id"]: row["last"]
+        for row in Visit.objects.filter(client_id__in=ids, is_deleted=False, status=VisitStatus.REALIZADA)
+        .values("client_id")
+        .annotate(last=Max("completed_at"))
+    }
+    area_map = {
+        row["client_id"]: float(row["area"] or 0)
+        for row in Site.objects.filter(client_id__in=ids, is_deleted=False)
+        .values("client_id")
+        .annotate(area=Sum("total_area_ha"))
+    }
+    rows = []
+    for client in clients:
+        sites = list(client.sites.all()) if hasattr(client, "_prefetched_objects_cache") and "sites" in getattr(client, "_prefetched_objects_cache", {}) else None
+        site = None
+        if sites is not None:
+            site = next((s for s in sites if s.is_primary), None) or (sites[0] if sites else None)
+        else:
+            site = primary_site(client)
+        rows.append(
+            _client_row(
+                client,
+                last=last_map.get(client.id),
+                area=area_map.get(client.id),
+                site=site,
+            )
+        )
+    return rows
 
 
 class ClientListView(APIView):
     permission_classes = [requires("clients.view")]
 
     def get(self, request):
-        rows = [_client_row(client) for client in clients_for(request.user, request.query_params.get("q", ""))[:200]]
-        return Response({"results": rows})
+        try:
+            page = max(1, int(request.query_params.get("page") or 1))
+        except ValueError:
+            page = 1
+        try:
+            page_size = min(200, max(10, int(request.query_params.get("page_size") or 25)))
+        except ValueError:
+            page_size = 25
+
+        qs = clients_for(request.user, request.query_params.get("q", ""))
+        status = (request.query_params.get("status") or "").strip().upper()
+        if status in CommercialStatus.values:
+            qs = qs.filter(commercial_status=status)
+        owner = (request.query_params.get("owner") or "").strip()
+        if owner == "none":
+            qs = qs.filter(owner_id__isnull=True)
+        elif owner:
+            qs = qs.filter(owner_id=owner)
+
+        total = qs.count()
+        start = (page - 1) * page_size
+        page_qs = qs.prefetch_related(
+            Prefetch(
+                "sites",
+                queryset=Site.objects.filter(is_deleted=False).select_related("municipality").order_by("-is_primary", "created_at"),
+            )
+        )[start : start + page_size]
+        return Response(
+            {
+                "results": _client_rows(page_qs),
+                "count": total,
+                "page": page,
+                "page_size": page_size,
+            }
+        )
 
     def post(self, request):
         client = create_client(request.user, request.data)
@@ -243,11 +322,14 @@ class AgendaView(APIView):
         view = request.query_params.get("view") or "today"
         if end_moment is not None and view == "today":
             view = "range"
-        today = timezone.localdate()
+        now = timezone.localtime()
         results = []
         for visit in agenda(request.user, moment, view, end_day=end_moment):
             when = timezone.localtime(visit.scheduled_start) if visit.scheduled_start else None
-            late = bool(when and when.date() < today and visit.status in {VisitStatus.PROGRAMADA, VisitStatus.EN_CURSO})
+            # Atrasada = programada y ya pasó la hora (incluye backlog de días previos).
+            late = bool(when and when < now and visit.status == VisitStatus.PROGRAMADA)
+            late_minutes = int((now - when).total_seconds() // 60) if late and when else 0
+            loc = visit.site.location
             results.append(
                 {
                     "id": str(visit.id),
@@ -259,6 +341,10 @@ class AgendaView(APIView):
                     "reason": visit.reason.name if visit.reason_id else "",
                     "scheduled_start": when.isoformat() if when else None,
                     "late": late,
+                    "late_minutes": late_minutes,
+                    "reschedule_count": visit.reschedule_count or 0,
+                    "latitude": loc.y if loc is not None else None,
+                    "longitude": loc.x if loc is not None else None,
                 }
             )
         return Response({"results": results})

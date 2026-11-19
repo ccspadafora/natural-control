@@ -1,5 +1,5 @@
 import { FormEvent, useEffect, useState } from "react"
-import { Link } from "react-router-dom"
+import { Link, useSearchParams } from "react-router-dom"
 import { api } from "@nc/api"
 import type { SessionUser } from "@nc/domain"
 import { Badge, Button, DataTable } from "@nc/ui"
@@ -131,16 +131,28 @@ export function ProgramacionPage({ user, onLogout }: { user: SessionUser; onLogo
           </span>
           <h1>Programación semanal</h1>
         </div>
-        {sent && !plan?.is_late ? (
-          <Badge tone="success" icon="check">
-            Enviada a tiempo
-          </Badge>
-        ) : null}
-        {sent && plan?.is_late ? (
-          <Badge tone="warning" icon="alert">
-            Enviada tarde
-          </Badge>
-        ) : null}
+        <div className="nc-portal-actions-row" style={{ justifyContent: "flex-end" }}>
+          {current.projection_sheet_url ? (
+            <a
+              className="nc-btn nc-btn-secondary"
+              href={current.projection_sheet_url}
+              target="_blank"
+              rel="noreferrer"
+            >
+              Ver proyección (Excel)
+            </a>
+          ) : null}
+          {sent && !plan?.is_late ? (
+            <Badge tone="success" icon="check">
+              Enviada a tiempo
+            </Badge>
+          ) : null}
+          {sent && plan?.is_late ? (
+            <Badge tone="warning" icon="alert">
+              Enviada tarde
+            </Badge>
+          ) : null}
+        </div>
       </header>
 
       {notice ? <p className="nc-note">{notice}</p> : null}
@@ -230,10 +242,12 @@ export function ProgramacionPage({ user, onLogout }: { user: SessionUser; onLogo
 }
 
 export function ProgramacionNuevaPage({ user, onLogout }: { user: SessionUser; onLogout: () => void }) {
+  const [params] = useSearchParams()
+  const prefillClient = params.get("client_id") || ""
   const [current, setCurrent] = useState<WeeklyPlanCurrent | null>(null)
   const [clients, setClients] = useState<{ id: string; name: string; sites?: { id: string; name: string }[] }[]>([])
   const [reasons, setReasons] = useState<{ id: string; name: string }[]>([])
-  const [clientId, setClientId] = useState("")
+  const [clientId, setClientId] = useState(prefillClient)
   const [siteId, setSiteId] = useState("")
   const [sites, setSites] = useState<{ id: string; name: string }[]>([])
   const [date, setDate] = useState("")
@@ -252,9 +266,14 @@ export function ProgramacionNuevaPage({ user, onLogout }: { user: SessionUser; o
       setCurrent(next)
       setDate(next.week_start)
     })
-    api<{ results: typeof clients }>("/api/v1/clients").then((data) => setClients(data.results))
+    api<{ results: typeof clients }>("/api/v1/clients").then((data) => {
+      setClients(data.results)
+      if (prefillClient && data.results.some((c) => c.id === prefillClient)) {
+        setClientId(prefillClient)
+      }
+    })
     api<{ results: typeof reasons }>("/api/v1/visit-reasons").then((data) => setReasons(data.results))
-  }, [])
+  }, [prefillClient])
 
   useEffect(() => {
     if (!clientId) return
@@ -306,7 +325,13 @@ export function ProgramacionNuevaPage({ user, onLogout }: { user: SessionUser; o
       <form className="nc-portal-card nc-portal-form" onSubmit={submit}>
         <label className="nc-field">
           <span className="nc-field-label">Cliente</span>
-          <select className="nc-input" value={clientId} onChange={(event) => setClientId(event.target.value)} required>
+          <select
+            className="nc-input"
+            value={clientId}
+            onChange={(event) => setClientId(event.target.value)}
+            required
+            disabled={Boolean(prefillClient && clientId === prefillClient)}
+          >
             <option value="">Elige</option>
             {clients.map((client) => (
               <option key={client.id} value={client.id}>
@@ -314,6 +339,9 @@ export function ProgramacionNuevaPage({ user, onLogout }: { user: SessionUser; o
               </option>
             ))}
           </select>
+          {prefillClient && clientId === prefillClient ? (
+            <span className="nc-field-help">Cliente traído desde la ficha. Ya no hace falta elegirlo de nuevo.</span>
+          ) : null}
         </label>
         {sites.length > 1 ? (
           <label className="nc-field">

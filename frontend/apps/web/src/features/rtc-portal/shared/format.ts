@@ -13,7 +13,27 @@ export function portalMonthEyebrow(date = new Date()) {
 
 export function visitClock(iso: string | null) {
   if (!iso) return "—"
-  return new Intl.DateTimeFormat("es-CO", { hour: "numeric", minute: "2-digit", timeZone: TZ }).format(new Date(iso))
+  // Compact am/pm so the hour never wraps in VisitCard.
+  return new Intl.DateTimeFormat("es-CO", { hour: "numeric", minute: "2-digit", timeZone: TZ })
+    .format(new Date(iso))
+    .replace(/\s*a\.\s*m\./gi, "\u00a0am")
+    .replace(/\s*p\.\s*m\./gi, "\u00a0pm")
+}
+
+/** Human label for how long a visit has been overdue. */
+export function lateAgo(iso: string | null, lateMinutes?: number | null) {
+  let mins = lateMinutes ?? null
+  if (mins == null && iso) {
+    mins = Math.floor((Date.now() - new Date(iso).getTime()) / 60000)
+  }
+  if (mins == null || mins < 0) return null
+  if (mins < 60) return `${mins} min atrasada`
+  const h = Math.floor(mins / 60)
+  const m = mins % 60
+  if (h < 24) return m ? `${h} h ${m} min atrasada` : `${h} h atrasada`
+  const d = Math.floor(h / 24)
+  const rh = h % 24
+  return rh ? `${d} d ${rh} h atrasada` : `${d} d atrasada`
 }
 
 export function visitDayShort(iso: string) {

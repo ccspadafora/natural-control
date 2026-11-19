@@ -2,6 +2,14 @@
 body{margin:0;background:var(--canvas);color:var(--ink);font-family:var(--font-sans);-webkit-font-smoothing:antialiased}
 a{color:var(--primary)}a:hover{color:var(--primary-pressed)}
 .nc-row{display:flex;flex-wrap:wrap;gap:var(--space-3);align-items:center;padding:var(--space-4)}
+/* DataTable */
+.nc-table-wrap{width:100%;overflow:auto;border:1px solid var(--hairline);border-radius:var(--radius-md);background:var(--surface)}
+.nc-table{width:100%;border-collapse:collapse;font:var(--text-body);color:var(--ink)}
+.nc-table th{text-align:left;font:700 12px/16px var(--font-sans);letter-spacing:.04em;text-transform:uppercase;color:var(--ink-tertiary);padding:14px 16px;border-bottom:1px solid var(--hairline);background:var(--surface-sunken);white-space:nowrap}
+.nc-table td{padding:14px 16px;border-bottom:1px solid var(--hairline);vertical-align:middle}
+.nc-table tbody tr:last-child td{border-bottom:0}
+.nc-table tbody tr:hover td{background:color-mix(in srgb,var(--primary) 6%,var(--surface))}
+.nc-empty{margin:0;padding:24px;text-align:center;color:var(--ink-secondary)}
 .nc-col{display:flex;flex-direction:column;gap:var(--space-3);padding:var(--space-4)}
 .nc-num{font-variant-numeric:tabular-nums}
 .nc-icon{width:18px;height:18px;flex:none}
@@ -41,7 +49,10 @@ a{color:var(--primary)}a:hover{color:var(--primary-pressed)}
 .nc-gps-none .nc-gps-dot{background:var(--surface-sunken);color:var(--ink-secondary)}
 .nc-gps-pre{border-style:dashed;border-color:var(--border-control)}
 /* ComplianceMeter */
-.nc-meter{background:var(--surface);border:1px solid var(--hairline);border-radius:var(--radius-md);padding:var(--space-4);display:grid;gap:var(--space-2);min-width:260px;box-sizing:border-box}
+.nc-meter{background:var(--surface);border:1px solid var(--hairline);border-radius:var(--radius-md);padding:var(--space-4);display:grid;gap:var(--space-2);min-width:0;width:100%;height:100%;box-sizing:border-box;align-content:space-between}
+a.nc-meter,a.nc-stat{text-decoration:none;color:inherit;transition:border-color .15s ease,transform .15s ease}
+a.nc-meter:hover,a.nc-stat:hover{border-color:var(--primary)}
+a.nc-meter:focus-visible,a.nc-stat:focus-visible{outline:2px solid var(--focus);outline-offset:2px}
 .nc-meter-head{display:flex;justify-content:space-between;align-items:baseline;gap:var(--space-3)}
 .nc-meter-label{font:800 11px/14px var(--font-sans);letter-spacing:.06em;text-transform:uppercase;color:var(--ink-secondary)}
 .nc-meter-pct{font:800 24px/28px var(--font-sans);font-variant-numeric:tabular-nums;display:inline-flex;align-items:center;gap:var(--space-1)}
@@ -54,14 +65,19 @@ a{color:var(--primary)}a:hover{color:var(--primary-pressed)}
 .nc-tone-yellow .nc-icon-sm{color:var(--warning)}.nc-fill-yellow{background:var(--warning-solid)}
 .nc-tone-red{color:var(--danger)}.nc-fill-red{background:var(--danger-solid)}
 /* VisitCard */
-.nc-visit{display:grid;grid-template-columns:56px 1fr;gap:var(--space-3);background:var(--surface);border:1px solid var(--hairline);border-radius:var(--radius-md);padding:var(--space-4);min-height:var(--tap-min);text-align:left;width:100%;box-sizing:border-box;cursor:pointer;font-family:var(--font-sans);color:var(--ink)}
-.nc-visit:focus-visible{outline:2px solid var(--focus);outline-offset:2px}
-.nc-visit-time{font:800 17px/22px var(--font-sans);font-variant-numeric:tabular-nums;color:var(--ink)}
-.nc-visit-time small{display:block;font:400 13px/18px var(--font-sans);color:var(--ink-tertiary)}
+.nc-visit{display:grid;gap:var(--space-3);background:var(--surface);border:1px solid var(--hairline);border-radius:var(--radius-md);padding:var(--space-4);min-height:var(--tap-min);text-align:left;width:100%;box-sizing:border-box;font-family:var(--font-sans);color:var(--ink)}
+.nc-visit-main{display:grid;grid-template-columns:minmax(6.75rem,auto) 1fr;gap:var(--space-3);align-items:start;width:100%;background:transparent;border:0;padding:0;margin:0;text-align:left;color:inherit;font:inherit;cursor:pointer}
+.nc-visit-main:focus-visible{outline:2px solid var(--focus);outline-offset:2px;border-radius:var(--radius-sm)}
+.nc-visit-time{font:800 17px/22px var(--font-sans);font-variant-numeric:tabular-nums;color:var(--ink);white-space:nowrap;min-width:6.75rem}
+.nc-visit-time span{display:block;white-space:nowrap}
+.nc-visit-time small{display:block;font:700 12px/16px var(--font-sans);color:var(--danger);white-space:nowrap;max-width:7.5rem}
 .nc-visit-body{display:grid;gap:var(--space-1);min-width:0}
 .nc-visit-title{font:700 17px/24px var(--font-sans);margin:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .nc-visit-meta{font:400 13px/18px var(--font-sans);color:var(--ink-secondary);display:flex;align-items:center;gap:var(--space-1)}
+.nc-visit-meta-link{text-decoration:underline;text-underline-offset:2px;color:var(--primary)}
+.nc-visit-meta-link:hover{color:var(--primary-pressed,var(--primary))}
 .nc-visit-foot{display:flex;flex-wrap:wrap;gap:var(--space-2);margin-top:var(--space-1);align-items:center}
+.nc-visit-actions{display:flex;flex-wrap:wrap;gap:var(--space-2);padding-top:var(--space-1);border-top:1px solid var(--hairline)}
 .nc-visit-pending{color:var(--ink-secondary);font:700 13px/18px var(--font-sans);display:inline-flex;align-items:center;gap:var(--space-1)}
 .nc-visit-pending .nc-icon-sm{color:var(--warning)}
 /* TextField */
@@ -96,7 +112,10 @@ a{color:var(--primary)}a:hover{color:var(--primary-pressed)}
 .nc-spin{animation:nc-spin 1s linear infinite}
 @media (prefers-reduced-motion:reduce){.nc-spin{animation:none}.nc-btn{transition:none}}
 /* StatTile */
-.nc-stat{background:var(--surface);border:1px solid var(--hairline);border-radius:var(--radius-md);padding:var(--space-5) var(--space-6);display:grid;gap:var(--space-1);min-width:200px;box-sizing:border-box}
+.nc-stat{background:var(--surface);border:1px solid var(--hairline);border-radius:var(--radius-md);padding:var(--space-5) var(--space-6);display:grid;gap:var(--space-1);min-width:0;width:100%;height:100%;box-sizing:border-box;align-content:space-between}
+.nc-stat-clickable{cursor:pointer;transition:border-color .15s ease,transform .15s ease}
+.nc-stat-clickable:hover{border-color:var(--primary)}
+.nc-stat-clickable:focus-visible{outline:2px solid var(--focus);outline-offset:2px}
 .nc-stat-label{font:800 11px/14px var(--font-sans);letter-spacing:.06em;text-transform:uppercase;color:var(--ink-secondary)}
 .nc-stat-value{font:800 40px/44px var(--font-sans);letter-spacing:-0.02em;font-variant-numeric:tabular-nums;color:var(--ink)}
 .nc-stat-delta{font:700 13px/18px var(--font-sans);display:inline-flex;align-items:center;gap:var(--space-1)}

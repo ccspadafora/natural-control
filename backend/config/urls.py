@@ -42,5 +42,7 @@ urlpatterns = [
     path("api/v1/", include("apps.accounts.admin_urls")),
 ]
 
-if settings.DEBUG:
+# Staging usa disco local (FileSystemStorage). En DEBUG también.
+_default_storage = (settings.STORAGES.get("default") or {}).get("BACKEND", "")
+if settings.DEBUG or "FileSystemStorage" in _default_storage:
     urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)

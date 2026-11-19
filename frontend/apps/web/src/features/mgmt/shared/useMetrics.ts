@@ -49,12 +49,19 @@ export function useForecast(months = 4) {
 export function useLiveVisits(date?: string) {
   const { data, error, loading, reload } = useFetch<LiveVisits>(`/api/v1/visits/live${date ? `?date=${date}` : ""}`)
   const timer = useRef<number>()
+  const lastReload = useRef(0)
 
   useEffect(() => {
     const close = openStream((message) => {
       if (!message.type.startsWith("visit.") && message.type !== "gps.discrepancy") return
       window.clearTimeout(timer.current)
-      timer.current = window.setTimeout(reload, 400)
+      // Evita rafagas: como mínimo 8s entre recargas completas del tablero.
+      timer.current = window.setTimeout(() => {
+        const now = Date.now()
+        if (now - lastReload.current < 8000) return
+        lastReload.current = now
+        reload()
+      }, 1200)
     })
     return () => {
       window.clearTimeout(timer.current)

@@ -129,6 +129,8 @@ services:
       dockerfile: infra/docker/nginx.prebuilt.Dockerfile
     ports:
       - "80:80"
+    volumes:
+      - media:/var/www/media:ro
     depends_on:
       api:
         condition: service_healthy

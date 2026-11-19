@@ -49,3 +49,27 @@ def test_forecast_rtc_own_scope(api):
     assert response.data["by_rtc"] == []
     assert response.data["gap"] is not None
     assert response.data["gap"]["budget"] == 34_000_000
+
+
+def test_forecast_deals_drilldown(api):
+    _auth(api, "rtc@naturalcontrol.test")
+    response = api.get("/api/v1/forecast/deals")
+    assert response.status_code == 200
+    assert "deals" in response.data
+    assert "summary" in response.data
+    assert response.data["summary"]["count"] == len(response.data["deals"])
+    assert "totals" in response.data["summary"]
+    assert "tips" in response.data["summary"]
+    if response.data["deals"]:
+        row = response.data["deals"][0]
+        for key in (
+            "id",
+            "product_name",
+            "client_id",
+            "client_name",
+            "total_value",
+            "probable_value",
+            "visit_id",
+            "status",
+        ):
+            assert key in row

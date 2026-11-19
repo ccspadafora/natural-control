@@ -3,6 +3,7 @@ import { Link, useLocation } from "react-router-dom"
 import { api } from "@nc/api"
 import type { SessionUser } from "@nc/domain"
 import { Badge, Button, Icon, PageHead, Tabs, type BadgeTone } from "@nc/ui"
+import { ClientPicker } from "../shared/ClientPicker"
 import { LeaderPortalPage } from "./LeaderPortalPage"
 import { useToast } from "../shared/useToast"
 
@@ -172,7 +173,7 @@ export function LeaderProgramacionPage({ user, onLogout }: { user: SessionUser; 
         setLoads(map)
       })
       .catch(() => setLoads({}))
-    api<{ results: ClientRow[] }>("/api/v1/clients")
+    api<{ results: ClientRow[] }>("/api/v1/clients?page_size=200")
       .then((data) => {
         setClients(data.results)
         setClientId(data.results[0]?.id || "")
@@ -458,16 +459,7 @@ export function LeaderProgramacionPage({ user, onLogout }: { user: SessionUser; 
               <h2 className="nc-portal-card-title">
                 Asignación manual{selectedRtc ? ` · ${selectedRtc.first_name} ${selectedRtc.last_name}` : ""}
               </h2>
-              <label className="nc-field">
-                <span className="nc-field-label">Cliente</span>
-                <select className="nc-input" value={clientId} onChange={(e) => setClientId(e.target.value)}>
-                  {clients.map((client) => (
-                    <option key={client.id} value={client.id}>
-                      {client.name} · {client.municipality}
-                    </option>
-                  ))}
-                </select>
-              </label>
+              <ClientPicker clients={clients} value={clientId} onChange={setClientId} />
               <label className="nc-field">
                 <span className="nc-field-label">Fecha</span>
                 <input className="nc-input" type="date" value={date} onChange={(e) => setDate(e.target.value)} required />

@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react"
 import { Link, useNavigate, useSearchParams } from "react-router-dom"
 import { api } from "@nc/api"
 import type { SessionUser } from "@nc/domain"
-import { Badge, Button, DataTable, Format, TextField, TOAST } from "@nc/ui"
+import { Badge, Button, Format, TextField, TOAST } from "@nc/ui"
 import { PortalPage } from "./PortalPage"
 import { CLIENT_STATUS, statusTone } from "./shared/clients"
 import { visitAgo } from "./shared/format"
@@ -23,6 +23,18 @@ type ClientRow = {
   client_type?: string
   segment?: string
   total_area_ha?: number | string | null
+}
+
+function secondaryName(client: ClientRow) {
+  const legal = (client.legal_name || "").trim()
+  if (!legal) return ""
+  if (legal.toLocaleLowerCase("es") === client.name.trim().toLocaleLowerCase("es")) return ""
+  return legal
+}
+
+function tipoLabel(client: ClientRow) {
+  const parts = [client.client_type, client.segment ? `Seg. ${client.segment}` : ""].filter(Boolean)
+  return parts.length ? parts.join(" · ") : "Sin clasificar"
 }
 
 export function CarteraPage({ user, onLogout }: { user: SessionUser; onLogout: () => void }) {
@@ -73,67 +85,75 @@ export function CarteraPage({ user, onLogout }: { user: SessionUser; onLogout: (
         </span>
       </header>
 
-      <TextField
-        label="Buscar"
-        placeholder="Busca por nombre, documento o municipio"
-        value={q}
-        onChange={(event) => {
-          const next = event.target.value
-          if (next) setParams({ q: next })
-          else setParams({})
-        }}
-      />
+      <section className="nc-cartera-panel">
+        <div className="nc-cartera-toolbar">
+          <TextField
+            label="Buscar en cartera"
+            placeholder="Nombre, documento o municipio"
+            value={q}
+            onChange={(event) => {
+              const next = event.target.value
+              if (next) setParams({ q: next })
+              else setParams({})
+            }}
+          />
+        </div>
 
-      {error ? <p className="nc-note">{error}</p> : null}
+        {error ? <p className="nc-note">{error}</p> : null}
 
-      <DataTable
-        rows={rows}
-        emptyMessage="Todavía no hay clientes en tu cartera."
-        columns={[
-          {
-            key: "name",
-            header: "Cliente",
-            render: (client) => (
-              <button type="button" className="nc-portal-link-row" onClick={() => navigate(`/portal/clientes/${client.id}`)}>
-                <span className="nc-portal-task-title">{client.name}</span>
-                {client.is_new ? <Badge tone="accent">Nuevo</Badge> : null}
-                {client.legal_name ? <span className="nc-portal-mono">{client.legal_name}</span> : null}
-              </button>
-            ),
-          },
-          { key: "mun", header: "Municipio", render: (c) => c.municipality || "—" },
-          {
-            key: "tipo",
-            header: "Tipo · segmento",
-            render: (c) =>
-              c.client_type || c.segment ? (
-                <span>
-                  {c.client_type || "—"} · {c.segment || "—"}
-                </span>
-              ) : (
-                <span className="nc-portal-muted">— · —</span>
-              ),
-          },
-          {
-            key: "estado",
-            header: "Estado",
-            render: (c) => <Badge tone={statusTone(c.status)}>{CLIENT_STATUS[c.status] || c.status}</Badge>,
-          },
-          {
-            key: "area",
-            header: "Área",
-            render: (c) => {
-              const ha = c.total_area_ha == null ? null : Number(c.total_area_ha)
-              return <span style={{ textAlign: "right", display: "block" }}>{ha != null && ha > 0 ? Format.hectares(ha) : "—"}</span>
-            },
-          },
-          {
-            key: "last",
-            header: "Última visita",
-            render: (c) => visitAgo(c.last_visit_at),
-          },
-        ]}
-      />
+        {rows.length === 0 && !error ? (
+          <div className="nc-cartera-empty">
+            <p className="nc-cartera-empty-title">Todavía no hay clientes en tu cartera</p>
+            <p className="nc-portal-muted">Registra el primero o pídele a tu líder que te asigne cartera.</p>
+            <Link className="nc-btn nc-btn-primary" to="/portal/clientes/nuevo">
+              Registrar cliente
+            </Link>
+          </div>
+        ) : (
+          <>
+            <div className="nc-cartera-head" aria-hidden="true">
+              <span>Cliente</span>
+              <span>Municipio</span>
+              <span>Tipo</span>
+              <span>Estado</span>
+              <span>Área</span>
+              <span>Última visita</span>
+            </div>
+            <ul className="nc-cartera-list">
+              {rows.map((client) => {
+                const legal = secondaryName(client)
+                const ha = client.total_area_ha == null ? null : Number(client.total_area_ha)
+                return (
+                  <li key={client.id}>
+                    <button
+                      type="button"
+                      className="nc-cartera-row"
+                      onClick={() => navigate(`/portal/clientes/${client.id}`)}
+                    >
+                      <span className="nc-cartera-client">
+                        <span className="nc-cartera-name">
+                          {client.name}
+                          {client.is_new ? <Badge tone="accent">Nuevo</Badge> : null}
+                        </span>
+                        {legal ? <span className="nc-cartera-legal">{legal}</span> : null}
+                        {client.phone ? <span className="nc-cartera-phone">{client.phone}</span> : null}
+                      </span>
+                      <span className="nc-cartera-mun">{client.municipality || "—"}</span>
+                      <span className="nc-cartera-tipo">{tipoLabel(client)}</span>
+                      <span className="nc-cartera-status">
+                        <Badge tone={statusTone(client.status)}>{CLIENT_STATUS[client.status] || client.status}</Badge>
+                      </span>
+                      <span className="nc-cartera-area">{ha != null && ha > 0 ? Format.hectares(ha) : "—"}</span>
+                      <span className="nc-cartera-visit">{visitAgo(client.last_visit_at)}</span>
+                    </button>
+                  </li>
+                )
+              })}
+            </ul>
+          </>
+        )}
+      </section>
+
       <p className="nc-portal-muted">
         ¿Necesitas mover clientes? Eso lo hace tu líder desde la{" "}
         <Link className="nc-text-link" to="/consola">

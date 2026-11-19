@@ -2,6 +2,7 @@ from django.urls import path
 
 from apps.visits.api import (
     EvidenceUploadView,
+    GpsCheckDetailView,
     GpsCheckListView,
     GpsReviewView,
     VisitAssignView,
@@ -12,6 +13,8 @@ from apps.visits.api import (
     VisitNotDoneView,
     VisitNowView,
     VisitReassignView,
+    VisitRescheduleStatsView,
+    VisitRescheduleView,
     VisitStartView,
     VisitSuggestionsView,
 )
@@ -40,12 +43,15 @@ urlpatterns = [
     path("visits/suggestions", VisitSuggestionsView.as_view()),
     path("visits/load", VisitLoadView.as_view()),
     path("visits/assign", VisitAssignView.as_view()),
+    path("visits/reschedule-stats", VisitRescheduleStatsView.as_view()),
     path("visits/<uuid:visit_id>/reassign", VisitReassignView.as_view()),
+    path("visits/<uuid:visit_id>/reschedule", VisitRescheduleView.as_view()),
     path("visits/<uuid:visit_id>", VisitDetailView.as_view()),
     path("visits/<uuid:visit_id>/start", VisitStartView.as_view()),
     path("visits/<uuid:visit_id>/close", VisitCloseView.as_view()),
     path("visits/<uuid:visit_id>/not-done", VisitNotDoneView.as_view()),
     path("visits/<uuid:visit_id>/evidence", EvidenceUploadView.as_view()),
     path("gps-checks", GpsCheckListView.as_view()),
+    path("gps-checks/<uuid:check_id>", GpsCheckDetailView.as_view()),
     path("gps-checks/<uuid:check_id>/review", GpsReviewView.as_view()),
 ]

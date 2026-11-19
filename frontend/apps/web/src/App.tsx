@@ -39,6 +39,7 @@ import {
   MisNumerosPage,
   ProgramacionNuevaPage,
   ProgramacionPage,
+  VisitPage,
 } from "./features/rtc-portal"
 import { NewClientPage } from "./features/rtc-portal/NewClientPage"
 import "@nc/ui/tokens.css"
@@ -67,6 +68,7 @@ export function App() {
       <Route path="/recuperar" element={<Recover />} />
       <Route path="/portal" element={user?.role === "RTC" ? <MisNumerosPage user={user} onLogout={() => { logout(); setUser(null) }} /> : user ? <Navigate to={homeFor(user.role)} replace /> : <Navigate to="/portal/login" replace />} />
       <Route path="/portal/agenda" element={user?.role === "RTC" ? <AgendaPage user={user} onLogout={() => { logout(); setUser(null) }} /> : <Navigate to={user ? homeFor(user.role) : "/portal/login"} replace />} />
+      <Route path="/portal/visitas/:id" element={user?.role === "RTC" ? <VisitPage user={user} onLogout={() => { logout(); setUser(null) }} /> : <Navigate to={user ? homeFor(user.role) : "/portal/login"} replace />} />
       <Route path="/portal/clientes" element={user?.role === "RTC" ? <CarteraPage user={user} onLogout={() => { logout(); setUser(null) }} /> : <Navigate to={user ? homeFor(user.role) : "/portal/login"} replace />} />
       <Route path="/portal/clientes/nuevo" element={user?.role === "RTC" ? <NewClientPage user={user} onLogout={() => { logout(); setUser(null) }} /> : <Navigate to={user ? homeFor(user.role) : "/portal/login"} replace />} />
       <Route path="/portal/clientes/:id" element={user?.role === "RTC" ? <ClientDetailPage user={user} onLogout={() => { logout(); setUser(null) }} /> : <Navigate to={user ? homeFor(user.role) : "/portal/login"} replace />} />

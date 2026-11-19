@@ -74,12 +74,33 @@ class Visit(BaseModel):
     is_offline_created = models.BooleanField(default=False)
     device = models.ForeignKey("accounts.Device", null=True, blank=True, on_delete=models.SET_NULL, related_name="visits")
     edit_locked_at = models.DateTimeField(null=True, blank=True)
+    reschedule_count = models.PositiveIntegerField(default=0)
 
     class Meta:
         indexes = [
             models.Index(fields=["rtc", "status", "scheduled_start"]),
             models.Index(fields=["client", "completed_at"]),
             models.Index(fields=["status", "completed_at"]),
+        ]
+
+
+class VisitReschedule(BaseModel):
+    """Historial de reagendamientos (auditoría + estadísticas)."""
+
+    visit = models.ForeignKey(Visit, on_delete=models.CASCADE, related_name="reschedules")
+    rtc = models.ForeignKey("accounts.User", on_delete=models.PROTECT, related_name="visit_reschedules")
+    changed_by = models.ForeignKey("accounts.User", on_delete=models.PROTECT, related_name="+")
+    previous_start = models.DateTimeField()
+    previous_end = models.DateTimeField(null=True, blank=True)
+    new_start = models.DateTimeField()
+    new_end = models.DateTimeField(null=True, blank=True)
+    reason = models.CharField(max_length=250, blank=True)
+    month_key = models.CharField(max_length=7, db_index=True)  # YYYY-MM
+
+    class Meta:
+        indexes = [
+            models.Index(fields=["rtc", "month_key"]),
+            models.Index(fields=["visit", "-created_at"]),
         ]
 
 

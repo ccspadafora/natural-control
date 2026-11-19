@@ -1,3 +1,4 @@
+import type { KeyboardEvent } from "react"
 import { Icon } from "../core/Icon"
 
 export type StatTileProps = {
@@ -8,6 +9,7 @@ export type StatTileProps = {
   deltaGood?: boolean
   caption?: string
   className?: string
+  onClick?: () => void
 }
 
 export function StatTile({
@@ -18,12 +20,28 @@ export function StatTile({
   deltaGood = true,
   caption,
   className = "",
+  onClick,
 }: StatTileProps) {
   const good = deltaDirection === "flat" ? null : deltaDirection === "up" === deltaGood
   const cls = good === null ? "flat" : good ? "up" : "down"
   const icon = { up: "arrowUp" as const, down: "arrowDown" as const, flat: "minus" as const }[deltaDirection]
+  const clickable = Boolean(onClick)
+  const onKeyDown = clickable
+    ? (e: KeyboardEvent) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault()
+          onClick?.()
+        }
+      }
+    : undefined
   return (
-    <div className={["nc-stat", className].filter(Boolean).join(" ")}>
+    <div
+      className={["nc-stat", clickable ? "nc-stat-clickable" : "", className].filter(Boolean).join(" ")}
+      role={clickable ? "button" : undefined}
+      tabIndex={clickable ? 0 : undefined}
+      onClick={onClick}
+      onKeyDown={onKeyDown}
+    >
       <span className="nc-stat-label">{label}</span>
       <span className="nc-stat-value">{value}</span>
       {delta ? (

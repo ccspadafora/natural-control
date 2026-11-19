@@ -19,6 +19,9 @@ def clients_for(user, query: str = ""):
             | Q(trade_name__unaccent__icontains=term)
             | Q(document_number__icontains=term)
             | Q(sites__municipality__name__unaccent__icontains=term, sites__is_deleted=False)
+            | Q(owner__first_name__unaccent__icontains=term)
+            | Q(owner__last_name__unaccent__icontains=term)
+            | Q(owner__email__icontains=term)
         ).distinct()
     return qs.order_by("legal_name")
 

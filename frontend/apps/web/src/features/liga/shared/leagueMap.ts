@@ -9,6 +9,40 @@ export const ATTR = [
   ["DES", "Desarrollo"],
 ] as const
 
+/** Qué mide cada atributo + consejo accionable para el RTC. */
+export const ATTR_COACH = [
+  {
+    meaning: "Avance de ventas vs tu presupuesto del mes.",
+    tipLow: "Esta semana cierra 2 pedidos o cotizaciones de horizonte corto que ya tengas abiertas.",
+    tipOk: "Sigue empujando el forecast corto: revisa diariamente qué falta para llegar al presupuesto.",
+  },
+  {
+    meaning: "Qué tanto conviertes visitas y cotizaciones en negocio.",
+    tipLow: "Lleva la cotización impresa y pide fecha de decisión en cada seguimiento.",
+    tipOk: "Mantén el cierre: confirma pedido el mismo día que el cliente dice que sí.",
+  },
+  {
+    meaning: "Ritmo de visitas frente a tu meta semanal/mensual.",
+    tipLow: "Programa al menos 3 visitas antes del mediodía y cumple la programación semanal.",
+    tipOk: "Buen ritmo: no dejes huecos en la agenda de la próxima semana.",
+  },
+  {
+    meaning: "Qué tan recorrida tienes tu cartera (clientes visitados a tiempo).",
+    tipLow: "Prioriza clientes sin visita en 30 días y agenda al menos 5 esta semana.",
+    tipOk: "Cartera al día: rota los municipios más flojos para no concentrarte en los mismos.",
+  },
+  {
+    meaning: "Calidad del registro: GPS, fotos y datos al cerrar visitas.",
+    tipLow: "Cierra cada visita con ubicación y al menos una foto; evita “continuar sin GPS” salvo excepción.",
+    tipOk: "Sigue registrando bien: una foto clara y nota concreta ayudan a tu líder.",
+  },
+  {
+    meaning: "Clientes nuevos y potencial que estás abriendo en la zona.",
+    tipLow: "Agenda 3 prospectos nuevos esta semana y ofréceles un producto de entrada.",
+    tipOk: "Buen desarrollo: convierte 1 prospecto de la lista en cotización esta semana.",
+  },
+] as const
+
 const FORM_FG: Record<LeagueForm, string> = {
   up: "var(--success)",
   flat: "var(--ink-secondary)",
@@ -127,28 +161,33 @@ export function mapPlayer(row: LeaguePlayerApi, pos?: number | null): LeagueRtc 
 
 export function attrCompareTable(rtc: LeagueRtc, compareVals: number[], compareName: string, day: number, days: number) {
   const aVals = rtc.a || [0, 0, 0, 0, 0, 0]
+  const pace = Math.round((rtc.visits / ((rtc.vt * day) / days || 1)) * 100)
   const ind = [
-    [`D1 ${rtc.d1Label} · D2 ${rtc.d2Label}`, `Te faltan ${rtc.toCatchLabel} para ponerte al día`],
-    [`C1 ${rtc.effLabel} · C5 ${money(rtc.visits ? rtc.sales / rtc.visits : 0)} por visita`, "Lleva la cotización impresa a las visitas de seguimiento"],
-    [`A6 ${Math.round((rtc.visits / ((rtc.vt * day) / days || 1)) * 100)} % de la zona · A3 92 %`, "Mantén 3 visitas antes del mediodía"],
-    [`B1 ${rtc.cobLabel} · B5 60 %`, `${rtc.stale} clientes sin visita en 30 días`],
-    [`E1 ${rtc.verifLabel} · E3 88 %`, "Agrega al menos una foto en cada cierre"],
-    [`B4 ${rtc.nuevos} nuevos · D7 41 %`, "Ofrece Trichobiol a los clientes de aguacate que usan Bacillus genérico"],
+    `Presupuesto: D1 ${rtc.d1Label} · D2 ${rtc.d2Label} · te faltan ${rtc.toCatchLabel}`,
+    `Cierre: eficiencia ${rtc.effLabel} · ${money(rtc.visits ? rtc.sales / rtc.visits : 0)} por visita`,
+    `Visitas: ${rtc.visits} de ${rtc.vt} meta · ritmo ${Number.isFinite(pace) ? pace : 0} %`,
+    `Cartera: cobertura ${rtc.cobLabel} · ${rtc.stale} sin visita en 30 días`,
+    `Registro: GPS/verif ${rtc.verifLabel}`,
+    `Pipeline: ${rtc.nuevos} clientes nuevos este periodo`,
   ]
   return ATTR.map(([k, n], i) => {
     const a = aVals[i]
     const b = compareVals[i]
     const d = a - b
+    const coach = ATTR_COACH[i]
+    const behind = !rtc.a || a < b || a < 80
     return {
       k,
       n,
+      meaning: coach.meaning,
       a: rtc.a ? String(a) : "—",
       b: String(b),
       diff: rtc.a ? (d > 0 ? `+${d}` : d < 0 ? `−${Math.abs(d)}` : "0") : "—",
       diffFg: d > 0 ? "var(--success)" : d < 0 ? "var(--danger)" : "var(--ink-secondary)",
-      indicators: ind[i][0],
-      action: ind[i][1],
+      indicators: ind[i],
+      action: behind ? coach.tipLow : coach.tipOk,
       compareName,
+      behind,
     }
   })
 }
